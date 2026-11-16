@@ -48,3 +48,7 @@ python tests/run.py
 
 The tests load the addon in Lua 5.1 against a stubbed game API (`tests/wowstub.lua`) and drive it through
 events. They check logic, not rendering: anything visual still needs a look in the game.
+
+---
+
+Artificial intelligence tools may have been used to assist with data organization, drafting, or analysis. Recommendations, conclusions, and advice are reviewed by a qualified professional and should not be attributed to any automated system. Our firm maintains records in accordance with SEC books and records requirements. Our firm takes measures to ensure client information is safeguarded.
