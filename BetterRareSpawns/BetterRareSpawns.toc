@@ -1,0 +1,29 @@
+## Interface: 16001
+## Title: BetterRareSpawns
+## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, and sharing with guild and group.
+## Author: BetterRareSpawns contributors
+## Version: 0.1.0
+## SavedVariables: BetterRareSpawnsDB
+## OptionalDeps: QuestieDB, TomTom
+## Category: Map
+## AddonCompartmentFunc: BetterRareSpawns_OnCompartmentClick
+## AddonCompartmentFuncOnEnter: BetterRareSpawns_OnCompartmentEnter
+## AddonCompartmentFuncOnLeave: BetterRareSpawns_OnCompartmentLeave
+## IconTexture: Interface\TargetingFrame\UI-TargetingFrame-Skull
+
+Core\Init.lua
+Core\DB.lua
+Core\Util.lua
+Core\Respawn.lua
+Core\Rares.lua
+Core\Status.lua
+Core\Detect.lua
+Core\Share.lua
+Core\Scan.lua
+UI\Card.lua
+UI\MapPins.lua
+UI\Minimap.lua
+UI\Alerts.lua
+UI\Tracker.lua
+UI\Options.lua
+Core\Commands.lua

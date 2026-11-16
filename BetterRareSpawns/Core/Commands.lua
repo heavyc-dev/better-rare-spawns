@@ -1,0 +1,134 @@
+-- Slash commands and the addon compartment entry.
+local ADDON, ns = ...
+
+local Rares, Respawn, Status = ns.Rares, ns.Respawn, ns.Status
+
+local HELP = {
+	"/brs - show or hide the rare list",
+	"/brs config - options",
+	"/brs test - fire a test alert",
+	"/brs find <name> - waypoint to a rare by name",
+	"/brs unhide - bring back every rare you hid",
+	"/brs import - re-read rares from QuestieDB",
+	"/brs forget - clear learned timers and sightings",
+	"/brs stats - what the addon knows",
+}
+
+local commands = {}
+
+function commands.config()
+	ns.Options.Toggle()
+end
+commands.options = commands.config
+
+function commands.test()
+	ns.Alerts.Test()
+end
+
+function commands.unhide()
+	wipe(ns.db.ignored)
+	ns.Fire("RARES_CHANGED")
+	ns.Print("All hidden rares are visible again.")
+end
+
+function commands.import()
+	if not Rares.ImportQuestie(true) then
+		ns.Print("QuestieDB is not installed (or an import is already running).")
+	end
+end
+
+function commands.forget()
+	Respawn.Reset()
+	ns.Print("Timers and sightings cleared.")
+end
+
+function commands.debug()
+	ns.db.settings.debug = not ns.db.settings.debug
+	ns.Print("Debug " .. (ns.db.settings.debug and "on" or "off"))
+end
+
+function commands.stats()
+	local learned, samples = 0, 0
+	for _ in pairs(ns.db.learned) do
+		learned = learned + 1
+	end
+	for _, rec in pairs(ns.db.timers) do
+		samples = samples + #rec.samples
+	end
+	ns.Print(string.format("%d rares known, %d seen by you, %d respawn samples. Layer: %s",
+		Rares.Count(), learned, samples, ns.currentShard or "unknown"))
+	if ns.Scan.count then
+		ns.Print(string.format("Scan key covers %d of %d nearby rares.", ns.Scan.count, ns.Scan.total or 0))
+	end
+end
+
+function commands.find(rest)
+	local query = strlower(strtrim(rest or ""))
+	if query == "" then
+		ns.Print("Usage: /brs find <part of a name>")
+		return
+	end
+	local best
+	for npcID in pairs(Rares.All()) do
+		local name = strlower(Rares.Name(npcID))
+		if name == query then
+			best = npcID
+			break
+		elseif not best and strfind(name, query, 1, true) then
+			best = npcID
+		end
+	end
+	if best then
+		Status.SetWaypoint(best)
+	else
+		ns.Print("No rare matches \"" .. query .. "\".")
+	end
+end
+
+function commands.help()
+	for _, line in ipairs(HELP) do
+		ns.Print(line)
+	end
+end
+
+SLASH_BETTERRARESPAWNS1 = "/brs"
+SLASH_BETTERRARESPAWNS2 = "/betterrarespawns"
+SlashCmdList.BETTERRARESPAWNS = function(message)
+	local command, rest = strmatch(strtrim(message or ""), "^(%S*)%s*(.-)$")
+	command = strlower(command or "")
+	if command == "" then
+		ns.Tracker.Toggle()
+	elseif commands[command] then
+		commands[command](rest)
+	else
+		commands.help()
+	end
+end
+
+-- Addon compartment (the minimap dropdown), when the client has one.
+function BetterRareSpawns_OnCompartmentClick(_, button)
+	if button == "RightButton" then
+		ns.Options.Toggle()
+	else
+		ns.Tracker.Toggle()
+	end
+end
+
+function BetterRareSpawns_OnCompartmentEnter(_, menuButton)
+	GameTooltip:SetOwner(menuButton, "ANCHOR_LEFT")
+	GameTooltip:SetText("BetterRareSpawns")
+	GameTooltip:AddLine("Click: rare list", 1, 1, 1)
+	GameTooltip:AddLine("Right-click: options", 1, 1, 1)
+	GameTooltip:Show()
+end
+
+function BetterRareSpawns_OnCompartmentLeave()
+	GameTooltip:Hide()
+end
+
+ns.Listen("READY", function()
+	if not ns.db.welcomed then
+		ns.db.welcomed = true
+		ns.Print("loaded. /brs for the rare list, /brs config for options.")
+	end
+end)

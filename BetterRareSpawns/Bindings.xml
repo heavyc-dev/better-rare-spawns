@@ -1,0 +1,6 @@
+<Bindings>
+	<Binding name="CLICK BetterRareSpawnsScan:LeftButton" header="BETTERRARESPAWNS" category="ADDONS"/>
+	<Binding name="BETTERRARESPAWNS_TRACKER" category="ADDONS">
+		BetterRareSpawns_ToggleTracker()
+	</Binding>
+</Bindings>
