@@ -8,7 +8,7 @@ import sys
 from lupa import lua51
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ADDON = ROOT / "BetterRareSpawns"
+ADDON = ROOT  # the repository root is the addon folder
 
 
 def main() -> int:
@@ -36,7 +36,11 @@ def main() -> int:
         load(path.read_text(encoding="utf-8"), "@" + relative, "BetterRareSpawns", namespace)
 
     listed = {f.replace("\\", "/") for f in files}
-    on_disk = {p.relative_to(ADDON).as_posix() for p in ADDON.rglob("*.lua")}
+    on_disk = {
+        p.relative_to(ADDON).as_posix()
+        for folder in ("Core", "UI")
+        for p in (ADDON / folder).rglob("*.lua")
+    }
     for orphan in sorted(on_disk - listed):
         print(f"FAIL  Lua file not in the TOC: {orphan}")
         return 1

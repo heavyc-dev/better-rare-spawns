@@ -2,7 +2,11 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "0.4.0"
+-- The packager writes the release tag here; a checkout from git has none.
+ns.VERSION = "@project-version@"
+if strsub(ns.VERSION, 1, 1) == "@" then
+	ns.VERSION = "dev"
+end
 ns.PREFIX = "|cff4fc3f7BRS|r"
 
 -------------------------------------------------------------------------------

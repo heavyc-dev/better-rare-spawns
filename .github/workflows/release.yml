@@ -1,0 +1,32 @@
+name: Release
+
+# Tag a commit vX.Y.Z to build a zip and attach it to a GitHub release.
+# CurseForge upload also needs:
+#   1. a repository secret named CF_API_KEY (CurseForge API token)
+#   2. "## X-Curse-Project-ID: <id>" in BetterRareSpawns.toc
+# Until both exist the packager skips the CurseForge upload.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install lupa
+      - run: python tests/run.py
+
+      - uses: BigWigsMods/packager@v2
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          GITHUB_OAUTH: ${{ secrets.GITHUB_TOKEN }}

@@ -79,6 +79,15 @@ Every window is drawn with the game's own art and frame templates, referenced by
 for the journal, tooltip borders for the hover card, alert and zone list, the dialog box for options, panel
 buttons, check boxes, the minimap button ring for map pins. The addon ships no textures.
 
+## Install
+
+From CurseForge, or copy this folder into `Interface/AddOns` as `BetterRareSpawns`.
+
+## Releasing
+
+Tag a commit `vX.Y.Z` and push the tag. The release workflow runs the tests, builds the zip with the BigWigs
+packager, attaches it to a GitHub release and uploads it to CurseForge.
+
 ## License
 
 MIT, see [LICENSE](LICENSE). Author: Heavy C.

@@ -3,7 +3,7 @@
 ## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, a journal of every rare and its drops, and sharing with guild and group.
 ## Author: Heavy C
 ## X-License: MIT
-## Version: 0.4.0
+## Version: @project-version@
 ## SavedVariables: BetterRareSpawnsDB
 ## OptionalDeps: QuestieDB, TomTom
 ## Category: Map
