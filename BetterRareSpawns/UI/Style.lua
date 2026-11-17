@@ -246,18 +246,23 @@ end
 -- game's ring border. Sets frame.fill, frame.icon, frame.ring.
 function Style.Medallion(frame, size, icon)
 	frame:SetSize(size, size)
-	frame.fill = Style.Disc(frame, "BACKGROUND", size * 0.13)
+	local unit = size / 31 -- the ring art is drawn for a 31 px button
+
+	frame.fill = Style.Disc(frame, "BACKGROUND", unit * 4.5)
 
 	frame.icon = frame:CreateTexture(nil, "ARTWORK")
 	frame.icon:SetTexture(icon or Style.TEX.skull)
 	frame.icon:SetPoint("CENTER")
-	frame.icon:SetSize(size * 0.5, size * 0.5)
+	frame.icon:SetSize(unit * 17, unit * 17)
 
-	-- The ring sits in the top-left 31/53 of its texture.
+	-- The ring sits in the top-left 31/53 of its texture, and its opening is
+	-- not centred in that corner: it lies 1.5 px right of and 0.5 px above the
+	-- middle. Shifting the texture back puts the opening on the frame's centre,
+	-- so the disc and icon sit in the middle of the ring.
 	frame.ring = frame:CreateTexture(nil, "OVERLAY")
 	frame.ring:SetTexture(Style.TEX.ring)
-	frame.ring:SetSize(size * 53 / 31, size * 53 / 31)
-	frame.ring:SetPoint("TOPLEFT")
+	frame.ring:SetSize(unit * 53, unit * 53)
+	frame.ring:SetPoint("TOPLEFT", -unit * 1.5, -unit * 0.5)
 	return frame
 end
 
