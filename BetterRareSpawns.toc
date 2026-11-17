@@ -3,6 +3,7 @@
 ## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, a journal of every rare and its drops, and sharing with guild and group.
 ## Author: Heavy C
 ## X-License: MIT
+## X-Curse-Project-ID: 1812611
 ## Version: @project-version@
 ## SavedVariables: BetterRareSpawnsDB
 ## OptionalDeps: QuestieDB, TomTom
@@ -10,7 +11,7 @@
 ## AddonCompartmentFunc: BetterRareSpawns_OnCompartmentClick
 ## AddonCompartmentFuncOnEnter: BetterRareSpawns_OnCompartmentEnter
 ## AddonCompartmentFuncOnLeave: BetterRareSpawns_OnCompartmentLeave
-## IconTexture: Interface\TargetingFrame\UI-TargetingFrame-Skull
+## IconTexture: InterfaceAddOnsBetterRareSpawnsmediaBetterRareSpawns_logo_512.png
 
 Core\Init.lua
 Core\DB.lua

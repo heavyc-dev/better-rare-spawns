@@ -8,3 +8,4 @@ ignore:
   - tests
   - .github
   - README.md
+  - media/BetterRareSpawns_logo.svg

@@ -1,3 +1,5 @@
+<p align="center"><img src="media/BetterRareSpawns_logo_512.png" width="160" alt="BetterRareSpawns logo"></p>
+
 # BetterRareSpawns
 
 A rare spawn tracker for World of Warcraft (built and tested against the `wowf` client, Interface 16001).

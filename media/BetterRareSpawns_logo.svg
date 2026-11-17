@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<defs>
+  <linearGradient id="gold" x1="0.1" y1="0" x2="0.5" y2="1">
+    <stop offset="0" stop-color="#FFF2A8"/>
+    <stop offset="0.2" stop-color="#FFD100"/>
+    <stop offset="0.55" stop-color="#C8901A"/>
+    <stop offset="0.85" stop-color="#8A5A0C"/>
+    <stop offset="1" stop-color="#5A3A06"/>
+  </linearGradient>
+  <linearGradient id="goldRev" x1="0.5" y1="1" x2="0.1" y2="0">
+    <stop offset="0" stop-color="#FFE36A"/>
+    <stop offset="0.45" stop-color="#B8860B"/>
+    <stop offset="1" stop-color="#4E3305"/>
+  </linearGradient>
+  <radialGradient id="rivet" cx="0.35" cy="0.3" r="0.8">
+    <stop offset="0" stop-color="#FFF6C0"/>
+    <stop offset="0.4" stop-color="#E0A820"/>
+    <stop offset="1" stop-color="#5A3A06"/>
+  </radialGradient>
+  <radialGradient id="disc" cx="0.5" cy="0.4" r="0.62">
+    <stop offset="0" stop-color="#2E2E52"/>
+    <stop offset="0.65" stop-color="#1A1A2E"/>
+    <stop offset="1" stop-color="#08080F"/>
+  </radialGradient>
+  <linearGradient id="bone" x1="0.15" y1="0" x2="0.75" y2="1">
+    <stop offset="0" stop-color="#FAF2DE"/>
+    <stop offset="0.45" stop-color="#E8DCC0"/>
+    <stop offset="0.8" stop-color="#C2AE84"/>
+    <stop offset="1" stop-color="#8E7A54"/>
+  </linearGradient>
+  <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#F2F4F8"/>
+    <stop offset="0.48" stop-color="#B4BBCB"/>
+    <stop offset="0.52" stop-color="#7C8396"/>
+    <stop offset="1" stop-color="#454A5A"/>
+  </linearGradient>
+  <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0" stop-color="#FFB0A0"/>
+    <stop offset="0.35" stop-color="#FF3B4E"/>
+    <stop offset="1" stop-color="#C41E3A" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="6"/>
+    <feOffset dy="7"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.7"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="soft" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="10"/></filter>
+  <clipPath id="discClip"><circle cx="256" cy="256" r="184"/></clipPath>
+</defs>
+  <circle cx="256" cy="264" r="244" fill="#000" opacity="0.4" filter="url(#soft)"/>
+  <circle cx="256" cy="256" r="246" fill="#120A02"/>
+  <circle cx="256" cy="256" r="239" fill="url(#gold)"/>
+  <!-- engraved double groove -->
+  <circle cx="256" cy="256" r="230" fill="none" stroke="#120A02" stroke-width="3" opacity="0.55"/>
+  <circle cx="256" cy="256" r="198" fill="none" stroke="#120A02" stroke-width="3" opacity="0.55"/>
+  <circle cx="256" cy="257.5" r="228" fill="none" stroke="#FFF2A8" stroke-width="1.5" opacity="0.5"/>
+  <circle cx="256.0" cy="43.5" r="12" fill="#120A02"/><circle cx="256.0" cy="42.0" r="9" fill="url(#rivet)"/><circle cx="407.3" cy="106.2" r="12" fill="#120A02"/><circle cx="407.3" cy="104.7" r="9" fill="url(#rivet)"/><circle cx="470.0" cy="257.5" r="12" fill="#120A02"/><circle cx="470.0" cy="256.0" r="9" fill="url(#rivet)"/><circle cx="407.3" cy="408.8" r="12" fill="#120A02"/><circle cx="407.3" cy="407.3" r="9" fill="url(#rivet)"/><circle cx="256.0" cy="471.5" r="12" fill="#120A02"/><circle cx="256.0" cy="470.0" r="9" fill="url(#rivet)"/><circle cx="104.7" cy="408.8" r="12" fill="#120A02"/><circle cx="104.7" cy="407.3" r="9" fill="url(#rivet)"/><circle cx="42.0" cy="257.5" r="12" fill="#120A02"/><circle cx="42.0" cy="256.0" r="9" fill="url(#rivet)"/><circle cx="104.7" cy="106.2" r="12" fill="#120A02"/><circle cx="104.7" cy="104.7" r="9" fill="url(#rivet)"/>
+  <!-- inner bevelled lip -->
+  <circle cx="256" cy="256" r="194" fill="url(#goldRev)"/>
+  <circle cx="256" cy="256" r="186" fill="#120A02"/>
+  <!-- painted rim highlight + shade -->
+  <path d="M 52 220 A 205 205 0 0 1 220 50" fill="none" stroke="#FFFBE0" stroke-width="7" stroke-linecap="round" opacity="0.75"/>
+  <path d="M 440 330 A 205 205 0 0 1 330 448" fill="none" stroke="#3A2404" stroke-width="7" stroke-linecap="round" opacity="0.5"/>
+  <circle cx="256" cy="256" r="183" fill="url(#disc)"/>
+  <circle cx="256" cy="256" r="158" fill="none" stroke="#5A5A8A" stroke-width="2" opacity="0.35"/>
+  <circle cx="256" cy="256" r="172" fill="none" stroke="#000" stroke-width="28" opacity="0.6" filter="url(#soft)"/><g clip-path="url(#discClip)" filter="url(#shadow)">
+    <g transform="rotate(-45 256 256) translate(256 256)">
+      <path d="M0 -178 L19 -148 L17 96 L-17 96 L-19 -148 Z" fill="url(#steel)" stroke="#120A02" stroke-width="6" stroke-linejoin="round"/>
+      <path d="M0 -140 L0 84" stroke="#3A3F50" stroke-width="5" stroke-linecap="round"/>
+      <path d="M-64 92 L-50 100 L50 100 L64 92 L60 118 L40 110 L-40 110 L-60 118 Z" fill="url(#gold)" stroke="#120A02" stroke-width="5" stroke-linejoin="round"/>
+      <rect x="-10" y="110" width="20" height="32" rx="3" fill="#5A3418" stroke="#120A02" stroke-width="4"/>
+      <path d="M-10 120 L10 116 M-10 130 L10 126 M-10 140 L10 136" stroke="#120A02" stroke-width="3"/>
+      <circle cx="0" cy="154" r="15" fill="url(#gold)" stroke="#120A02" stroke-width="5"/>
+      <circle cx="0" cy="154" r="6" fill="#C41E3A"/>
+    </g>
+    <g transform="rotate(45 256 256) translate(256 256)">
+      <path d="M0 -178 L19 -148 L17 96 L-17 96 L-19 -148 Z" fill="url(#steel)" stroke="#120A02" stroke-width="6" stroke-linejoin="round"/>
+      <path d="M0 -140 L0 84" stroke="#3A3F50" stroke-width="5" stroke-linecap="round"/>
+      <path d="M-64 92 L-50 100 L50 100 L64 92 L60 118 L40 110 L-40 110 L-60 118 Z" fill="url(#gold)" stroke="#120A02" stroke-width="5" stroke-linejoin="round"/>
+      <rect x="-10" y="110" width="20" height="32" rx="3" fill="#5A3418" stroke="#120A02" stroke-width="4"/>
+      <path d="M-10 120 L10 116 M-10 130 L10 126 M-10 140 L10 136" stroke="#120A02" stroke-width="3"/>
+      <circle cx="0" cy="154" r="15" fill="url(#gold)" stroke="#120A02" stroke-width="5"/>
+      <circle cx="0" cy="154" r="6" fill="#C41E3A"/>
+    </g></g>
+  <g filter="url(#shadow)"><g transform="translate(256 248) scale(1.07) translate(-256 -240)">
+    <path d="M256 132 C302 132 342 158 352 202 L356 234 C356 258 346 276 334 288 L326 300 L322 332 Q320 348 304 348 L208 348 Q192 348 190 332 L186 300 L178 288 C166 276 156 258 156 234 L160 202 C170 158 210 132 256 132 Z" fill="url(#bone)" stroke="#120A02" stroke-width="7" stroke-linejoin="round"/>
+    <!-- painted shading: brow + cheek hollows -->
+    <path d="M178 226 Q256 206 334 226 Q256 216 178 232 Z" fill="#8E7A54" opacity="0.35"/>
+    <path d="M196 288 Q214 300 232 292 L226 312 L200 310 Z" fill="#8E7A54" opacity="0.5"/>
+    <path d="M316 288 Q298 300 280 292 L286 312 L312 310 Z" fill="#8E7A54" opacity="0.5"/>
+    <!-- angled eye sockets -->
+    <path d="M174 226 L246 242 Q246 274 212 276 Q178 272 174 226 Z" fill="#0A0A14"/>
+    <path d="M338 226 L266 242 Q266 274 300 276 Q334 272 338 226 Z" fill="#0A0A14"/>
+    <circle cx="216" cy="256" r="16" fill="url(#glow)"/>
+    <circle cx="296" cy="256" r="16" fill="url(#glow)"/>
+    <!-- nose -->
+    <path d="M256 276 L240 304 L256 297 L272 304 Z" fill="#0A0A14"/>
+    <!-- mouth + teeth -->
+    <path d="M204 318 L308 318" stroke="#0A0A14" stroke-width="6" stroke-linecap="round"/>
+    <rect x="223" y="318" width="10" height="24" rx="4" fill="#0A0A14"/>
+    <rect x="251" y="318" width="10" height="24" rx="4" fill="#0A0A14"/>
+    <rect x="279" y="318" width="10" height="24" rx="4" fill="#0A0A14"/>
+    <!-- crack -->
+    <path d="M304 146 L294 168 L308 180 L298 202" fill="none" stroke="#0A0A14" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- highlights -->
+    <path d="M190 190 C202 164 228 148 256 146" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+    <path d="M214 160 L222 156" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.5"/>
+  </g></g>
+</svg>
