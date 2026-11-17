@@ -499,7 +499,26 @@ Journal.Toggle(false)
 section("camp bar")
 local Camp = ns.Camp
 Camp.Stop(false) -- earlier sections stood on spawn points long enough to raise it
+local campChat = #T.chat
+T.Advance(700) -- let earlier notices expire
 T.player.map, T.player.x, T.player.y = 1433, 0.30, 0.30 -- on Elite Rare's spawn point
+T.Advance(5)
+local nearNotices, plateHint = 0, false
+for i = campChat + 1, #T.chat do
+	local line = tostring(T.chat[i])
+	if line:find("Elite Rare") and line:find("spawns near here %-") then nearNotices = nearNotices + 1 end
+end
+local plateHints = 0
+for i = 1, #T.chat do -- once per session, so it may have come earlier in the run
+	if tostring(T.chat[i]):find("Enemy nameplates are off") then plateHints = plateHints + 1 end
+end
+plateHint = plateHints == 1
+check("walking into a spawn area is announced once", nearNotices == 1, nearNotices)
+check("nameplates being off is pointed out", plateHint)
+Camp.Stop(false)
+T.player.x, T.player.y = 0.90, 0.90
+T.Advance(20)
+T.player.x, T.player.y = 0.30, 0.30
 T.Advance(5)
 check("no bar for someone passing through", Camp.Current() == nil)
 T.Advance(15)

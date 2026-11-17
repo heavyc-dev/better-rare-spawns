@@ -25,6 +25,7 @@ local defaults = {
 		cooldown = 300, -- seconds before the same rare alerts again
 		reports = true, -- alert on sightings reported by other players
 		instances = true, -- alert inside dungeons and raids
+		nearby = true, -- say so when the player walks into a rare's spawn area
 		mark = false, -- put a raid marker on the rare when targeted
 		windows = true, -- notice when a wanted rare's spawn window opens
 		wanted = true, -- extra sound and screen message for wanted rares

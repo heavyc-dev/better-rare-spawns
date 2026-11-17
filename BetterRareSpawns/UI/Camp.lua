@@ -16,6 +16,9 @@ local FAR = 140 -- yards: far enough to count as having left
 local DWELL = 12 -- seconds near a spawn point before the bar offers itself
 local LEAVE = 8 -- seconds away before it goes
 local MANUAL_RANGE = 400
+local NOTICE_RANGE = 120 -- yards: "you are in its spawn area"
+local NOTICE_GAP = 600 -- seconds before the same rare is mentioned again
+local noticed = {} -- [npcID] = GetTime() of the last notice
 
 local frame
 local campID -- rare on the bar
@@ -216,9 +219,42 @@ function Camp.Toggle()
 	end
 end
 
+local nameplateHintGiven = false
+
+--- Says once, on screen and in chat, that the player has walked into a rare's
+-- spawn area and what its timer says. Without this, arriving at a spawn point
+-- whose rare is not up (or not yet noticed) shows nothing at all.
+local function Notice(now)
+	local alerts = ns.db.settings.alerts
+	if not alerts.enabled or not alerts.nearby then
+		return
+	end
+	local npcID = Nearest(NOTICE_RANGE)
+	if not npcID or (noticed[npcID] and now - noticed[npcID] < NOTICE_GAP) then
+		return
+	end
+	noticed[npcID] = now
+
+	local name = Rares.Name(npcID)
+	local status = Status.Describe(npcID)
+	if UIErrorsFrame then
+		UIErrorsFrame:AddMessage(name .. " spawns near here", 1, 0.82, 0.29)
+	end
+	if alerts.chat then
+		ns.Print("|cffffd24a" .. name .. "|r spawns near here - " .. status .. ".")
+	end
+
+	-- Walking past a rare only notices it through its nameplate.
+	if not nameplateHintGiven and ns.db.settings.detect.nameplate and GetCVar and GetCVar("nameplateShowEnemies") == "0" then
+		nameplateHintGiven = true
+		ns.Print("Enemy nameplates are off, so a rare is only noticed when you mouse over it, target it or press the scan key. Turn on enemy nameplates (V by default) to have it noticed as you walk up.")
+	end
+end
+
 --- Once a second: offer, keep or drop the bar depending on where the player is.
 function Camp.Tick()
 	local now = GetTime()
+	Notice(now)
 
 	if campID then
 		local distance = DistanceTo(campID)

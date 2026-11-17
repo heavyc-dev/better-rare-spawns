@@ -72,10 +72,12 @@ local function RebuildPoints(mapID)
 	for _, entry in ipairs(list) do
 		if not Rares.IsIgnored(entry.id) then
 			local state = Respawn.GetState(entry.id, nil, scratchState).state
-			local rec = Respawn.GetRecord(entry.id)
-			local seen = rec and rec.seen
-			if state == "up" and seen and seen.map == mapID and seen.x then
-				points[#points + 1] = { id = entry.id, map = mapID, x = seen.x, y = seen.y, state = state, rank = entry.rank }
+			local liveX, liveY
+			if state == "up" then
+				liveX, liveY = Status.LivePoint(entry.id, mapID)
+			end
+			if liveX then
+				points[#points + 1] = { id = entry.id, map = mapID, x = liveX, y = liveY, state = state, rank = entry.rank }
 			else
 				local spawn = entry.spawns[mapID]
 				for i = 1, #spawn, 2 do

@@ -68,6 +68,25 @@ end
 
 --- Where to send the player for this rare: mapID, x, y.
 -- Prefers a fresh sighting, else the spawn point nearest to the player.
+--- Where to draw a rare that is up on `mapID`: x, y, or nil when it has no
+-- live sighting there. A position reported by someone else is used as it is.
+-- The player's own sighting records where the player stood, which would put
+-- the pin under their own arrow, so it snaps to the nearest spawn point.
+function Status.LivePoint(npcID, mapID)
+	local rec = Respawn.GetRecord(npcID)
+	local seen = rec and rec.seen
+	if not (seen and seen.map == mapID and seen.x) then
+		return nil
+	end
+	if not seen.by then
+		local x, y = Rares.NearestPoint(npcID, mapID, seen.x, seen.y)
+		if x then
+			return x, y
+		end
+	end
+	return seen.x, seen.y
+end
+
 function Status.BestPoint(npcID, preferMap)
 	local rec = Respawn.GetRecord(npcID)
 	local seen = rec and rec.seen

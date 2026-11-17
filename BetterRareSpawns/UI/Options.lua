@@ -19,6 +19,7 @@ local LAYOUT = {
 		{ "alerts", "flash", "Flash the game icon in the taskbar" },
 		{ "alerts", "chat", "Print a chat line" },
 		{ "alerts", "reports", "Alert on reports from guild / group" },
+		{ "alerts", "nearby", "Tell me when I walk into a rare's spawn area" },
 		{ "alerts", "instances", "Alert inside dungeons and raids" },
 		{ "alerts", "mark", "Put a skull marker on a targeted rare" },
 		{ "alerts", "wanted", "Louder alert for wanted rares" },

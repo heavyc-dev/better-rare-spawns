@@ -164,13 +164,14 @@ local function CollectZone(mapID, items, settings)
 	for _, entry in ipairs(list) do
 		if Passes(entry, settings) then
 			local state = StateOf(entry.id)
-			local rec = Respawn.GetRecord(entry.id)
-			local seen = rec and rec.seen
-			local live = state == "up" and seen and seen.map == mapID and seen.x
+			local liveX, liveY
+			if state == "up" then
+				liveX, liveY = Status.LivePoint(entry.id, mapID)
+			end
 
-			if live then
+			if liveX then
 				-- It is up and we know where: one pin, at that spot.
-				items[#items + 1] = { id = entry.id, map = mapID, x = seen.x, y = seen.y, px = seen.x, py = seen.y, state = state, rank = entry.rank }
+				items[#items + 1] = { id = entry.id, map = mapID, x = liveX, y = liveY, px = liveX, py = liveY, state = state, rank = entry.rank }
 			else
 				local points = entry.spawns[mapID]
 				for i = 1, #points, 2 do
