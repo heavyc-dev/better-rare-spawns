@@ -33,6 +33,12 @@ No libraries, no bundled art, about 200 KB.
 - **Guild sync**: at login the addon asks the guild for its recent deaths and learned respawn times; one
   member answers.
 - **Minimap button** with a count of rares that are up, and a data broker feed for bar addons.
+- **Uncluttered map**: one pin per rare by default; hover it (or track it) and its other spawn points appear.
+  A rare is a plain disc in its timer colour with a silver ring, a rare elite adds a skull and a gold ring.
+- **Minimap pins across zone borders**: a spawn point just over the border still shows on the minimap.
+- **Scan key binder** in the options window: click, press a key, done.
+- **Setup check** at first login (and `/brs setup`): says when the rare database is missing, the scan key is
+  unbound, enemy nameplates are off, or another rare addon is running alongside.
 - **Sharing** of sightings, deaths and respawn times with guild and group over hidden addon messages.
 
 ## Controls
@@ -72,6 +78,10 @@ have met the rare.
 Every window is drawn with the game's own art and frame templates, referenced by path: the spellbook frame
 for the journal, tooltip borders for the hover card, alert and zone list, the dialog box for options, panel
 buttons, check boxes, the minimap button ring for map pins. The addon ships no textures.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Author: Heavy C.
 
 ## Development
 

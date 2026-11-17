@@ -26,6 +26,22 @@ T.Fire("PLAYER_LOGIN")
 check("saved variables created", type(BetterRareSpawnsDB) == "table" and ns.db == BetterRareSpawnsDB)
 check("defaults applied", ns.db.settings.alerts.cooldown == 300)
 check("slash command registered", type(SlashCmdList.BETTERRARESPAWNS) == "function")
+T.addons = { RareScanner = true }
+ns.Welcome.Show(false)
+local function Said(pattern, from)
+	local n = 0
+	for i = (from or 0) + 1, #T.chat do
+		if tostring(T.chat[i]):find(pattern) then n = n + 1 end
+	end
+	return n
+end
+check("first login greets once", Said("opens the rare journal") == 1)
+check("missing database is pointed out", Said("No rare database found") == 1)
+check("unbound scan key is pointed out", Said("scan key|r is not bound") == 1)
+check("a second rare addon is pointed out", Said("RareScanner is also running") == 1)
+T.addons = nil
+local afterWelcome = #T.chat
+check("problems are not repeated the same day", ns.Welcome.Show(false) == 0 and #T.chat == afterWelcome)
 
 -------------------------------------------------------------------------------
 section("QuestieDB import")
@@ -199,6 +215,7 @@ check("long lists are cut at a line boundary", #text <= 255 and not text:find("\
 -------------------------------------------------------------------------------
 section("map pins")
 T.mapShown = 1429
+ns.db.settings.map.compact = false
 ns.MapPins.Refresh()
 local function VisiblePins()
 	local n = 0
@@ -242,6 +259,80 @@ local hiddenID = pin.items[1].id
 pin.__scripts.OnClick(pin)
 T.alt = false
 check("alt-click hides the rare", ns.Rares.IsIgnored(hiddenID))
+ns.Rares.SetIgnored(hiddenID, false)
+ns.Status.ClearWaypoint()
+
+-- One pin per rare: a rare with several spawn points shows one until hovered.
+local function PinsOf(npcID)
+	local n = 0
+	for _, frame in ipairs(T.frames) do
+		if frame.items and frame.__parent == BetterRareSpawnsMapOverlay and frame:IsShown() then
+			for _, item in ipairs(frame.items) do
+				if item.id == npcID then n = n + 1 end
+			end
+		end
+	end
+	return n
+end
+local function PinOf(npcID)
+	for _, frame in ipairs(T.frames) do
+		if frame.items and frame.__parent == BetterRareSpawnsMapOverlay and frame:IsShown() and frame.items[1].id == npcID then
+			return frame
+		end
+	end
+end
+ns.Rares.Learn(777, { name = "Wide Roamer", level = 20, rank = "rare", map = 1429, x = 10, y = 10 })
+ns.Rares.Learn(777, { map = 1429, x = 80, y = 15 })
+ns.Rares.Learn(777, { map = 1429, x = 20, y = 85 })
+T.canvasScale = 6
+ns.MapPins.Refresh()
+check("every spawn point drawn when the option is off", PinsOf(777) == 3, PinsOf(777))
+ns.db.settings.map.compact = true
+ns.MapPins.Refresh()
+check("one pin per rare when it is on", PinsOf(777) == 1, PinsOf(777))
+local roamer = PinOf(777)
+roamer.__scripts.OnEnter(roamer)
+check("hovering brings in the other spawn points", PinsOf(777) == 3 and BetterRareSpawnsCard:IsShown(), PinsOf(777))
+roamer = PinOf(777)
+roamer.__scripts.OnLeave(roamer)
+T.Advance(1)
+T.Update(0.6)
+check("they stay a moment after the cursor leaves", PinsOf(777) == 3, PinsOf(777))
+T.Advance(4)
+T.Update(0.6)
+check("then fold back to one", PinsOf(777) == 1, PinsOf(777))
+local plain, skull = PinOf(777), PinOf(101)
+check("a rare is a plain disc", plain and not plain.icon:IsShown())
+T.canvasScale = 1
+ns.db.settings.map.compact = false
+ns.MapPins.Refresh()
+
+-------------------------------------------------------------------------------
+section("minimap across a zone border")
+local function MinimapDots()
+	local ids = {}
+	for _, frame in ipairs(T.frames) do
+		if frame.item and frame.__parent == BetterRareSpawnsMinimap and frame:IsShown() then
+			ids[frame.item.id] = (ids[frame.item.id] or 0) + 1
+		end
+	end
+	return ids
+end
+-- 778 lives 60 yards inside Redridge; the player stands 60 yards short of
+-- the border in Elwynn. Elwynn and Redridge are 3000 yards wide.
+ns.Rares.Learn(778, { name = "Border Lurker", level = 22, rank = "rare", map = 1433, x = 2, y = 50 })
+check("zone maps are related through world coordinates", math.abs((ns.Util.ToMap(1433, 2, 50, 1429)) - 102) < 0.01, ns.Util.ToMap(1433, 2, 50, 1429))
+T.player.map, T.player.x, T.player.y = 1429, 0.98, 0.50
+T.Update(6)
+T.Update(0.2)
+check("a rare just across the border is on the minimap", MinimapDots()[778] == 1, MinimapDots()[778])
+T.player.x = 0.50
+T.Update(6)
+T.Update(0.2)
+check("and gone when it is far away", MinimapDots()[778] == nil, MinimapDots()[778])
+ns.Rares.Forget(778)
+ns.Rares.Forget(777)
+check("test rares forgotten", ns.Rares.Get(777) == nil and ns.Rares.Get(778) == nil)
 
 -------------------------------------------------------------------------------
 section("commands and windows")
@@ -565,6 +656,25 @@ SlashCmdList.BETTERRARESPAWNS("want old")
 check("/brs want stars a rare", Hunt.IsStarred(100))
 SlashCmdList.BETTERRARESPAWNS("want old")
 check("no Lua errors in the new features", #T.errors == 0, T.errors[1])
+
+-------------------------------------------------------------------------------
+section("scan key binder")
+ns.Options.Toggle()
+if not BetterRareSpawnsOptions:IsShown() then ns.Options.Toggle() end
+T.bindings["F8"] = "TOGGLEWORLDMAP"
+local bindChat = #T.chat
+check("a key gets bound to the scan button", ns.Options.BindScanKey("F8") == true
+	and GetBindingKey("CLICK BetterRareSpawnsScan:LeftButton") == "F8" and T.bindingsSaved)
+check("taking a key from another action is said", Said("F8 was bound to", bindChat) == 1)
+ns.Options.BindScanKey("SHIFT-G")
+check("rebinding frees the old key", T.bindings["F8"] == nil and T.bindings["SHIFT-G"] ~= nil)
+T.combat = true
+check("no binding in combat", ns.Options.BindScanKey("F9") == false and T.bindings["F9"] == nil)
+T.combat = false
+ns.Options.UnbindScanKey()
+check("right-click clears it", GetBindingKey("CLICK BetterRareSpawnsScan:LeftButton") == nil)
+ns.Options.Toggle()
+SlashCmdList.BETTERRARESPAWNS("setup")
 
 -------------------------------------------------------------------------------
 section("combat and instances")

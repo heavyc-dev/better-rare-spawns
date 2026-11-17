@@ -25,6 +25,11 @@ local pins, active = {}, 0
 local dirty = true
 local scratchState = {}
 local hoverID, focusID, focusUntil
+-- With "one pin per rare" on, the rare whose other spawn points are shown,
+-- and until when (it outlives the hover a little so the cursor can reach them).
+local expandID, expandUntil
+local EXPAND_LINGER = 2.5
+local refreshing = false
 
 local function Settings()
 	return ns.db.settings.map
@@ -58,11 +63,31 @@ end
 local function PinOnEnter(self)
 	Card.Show(self, self.items)
 	hoverID = self.items[1].id
+	if Settings().compact then
+		local changed = expandID ~= hoverID
+		expandID, expandUntil = hoverID, math.huge
+		if changed and refreshing then
+			dirty = true -- drawn again shortly, with this rare's other points
+		elseif changed then
+			local id = hoverID
+			MapPins.Refresh() -- bring in its other spawn points
+			if not hoverID then
+				-- The redraw did not find the cursor on a pin; this one still has it.
+				hoverID = id
+				Card.Show(self, self.items)
+				UpdateGlow()
+			end
+			return
+		end
+	end
 	UpdateGlow()
 end
 
 local function PinOnLeave(self)
 	Card.Hide(self)
+	if expandID and expandID == hoverID then
+		expandUntil = GetTime() + EXPAND_LINGER
+	end
 	hoverID = nil
 	UpdateGlow()
 end
@@ -154,6 +179,33 @@ local function StateOf(npcID)
 	return info.state
 end
 
+--- True when every spawn point of this rare should be drawn although "one
+-- pin per rare" is on: it is hovered, pointed out by the journal, or tracked.
+local function Expanded(npcID)
+	if expandID == npcID and GetTime() <= expandUntil then
+		return true
+	end
+	if focusID == npcID and GetTime() <= focusUntil then
+		return true
+	end
+	return ns.tracked and ns.tracked.id == npcID or false
+end
+
+--- The one spawn point that stands for a rare: the nearest to the player when
+-- they are on this map, else the one closest to the middle of its points.
+local function OnePoint(entry, mapID)
+	local points = entry.spawns[mapID]
+	local playerMap, px, py = Util.PlayerPosition()
+	if playerMap ~= mapID or not px then
+		px, py = 0, 0
+		for i = 1, #points, 2 do
+			px, py = px + points[i], py + points[i + 1]
+		end
+		px, py = px / (#points / 2), py / (#points / 2)
+	end
+	return Rares.NearestPoint(entry.id, mapID, px, py)
+end
+
 --- Items for a zone map: every spawn point, plus the live position of rares
 -- that are up.
 local function CollectZone(mapID, items, settings)
@@ -172,6 +224,11 @@ local function CollectZone(mapID, items, settings)
 			if liveX then
 				-- It is up and we know where: one pin, at that spot.
 				items[#items + 1] = { id = entry.id, map = mapID, x = liveX, y = liveY, px = liveX, py = liveY, state = state, rank = entry.rank }
+			elseif settings.compact and #entry.spawns[mapID] > 2 and not Expanded(entry.id) then
+				-- One pin per rare keeps a busy zone readable; hovering it
+				-- brings in the rest.
+				local x, y = OnePoint(entry, mapID)
+				items[#items + 1] = { id = entry.id, map = mapID, x = x, y = y, px = x, py = y, state = state, rank = entry.rank, more = #entry.spawns[mapID] / 2 - 1 }
 			else
 				local points = entry.spawns[mapID]
 				for i = 1, #points, 2 do
@@ -234,6 +291,8 @@ local function CanvasScale()
 	return (scale and scale > 0) and scale or 1
 end
 
+local Redraw
+
 local function HideAll()
 	for i = 1, active do
 		pins[i].pulse:Stop()
@@ -245,9 +304,18 @@ end
 
 function MapPins.Refresh()
 	dirty = false
-	if not overlay then
+	if not overlay or refreshing then
 		return
 	end
+	if expandID and GetTime() > expandUntil then
+		expandID = nil
+	end
+	refreshing = true
+	ns.SafeCall(Redraw)
+	refreshing = false
+end
+
+Redraw = function()
 	local settings = Settings()
 	local mapID = WorldMapFrame:GetMapID()
 	if not settings.enabled or not mapID or not WorldMapFrame:IsShown() then
@@ -311,8 +379,8 @@ function MapPins.Refresh()
 
 		local color = Status.COLORS[first.state]
 		pin.fill:SetVertexColor(color[1], color[2], color[3])
-		-- Dark skull on the state colour; a gold ring when a rare elite is here,
-		-- silver otherwise (as on the target frame).
+		-- A plain disc in the state colour with a silver ring for a rare; a
+		-- rare elite adds the skull and a gold ring (as on the target frame).
 		pin.icon:SetVertexColor(0.1, 0.1, 0.1)
 		local elite = false
 		for _, item in ipairs(cluster.items) do
@@ -337,7 +405,7 @@ function MapPins.Refresh()
 
 		local many = #cluster.items > 1
 		pin.count:SetText(many and #cluster.items or "")
-		pin.icon:SetShown(not many)
+		pin.icon:SetShown(elite and not many)
 		pin.label:SetText((settings.labels and not many) and Rares.Name(first.id) or "")
 
 		local quiet = first.state == "unknown" or first.state == "killed" or first.state == "dead"
@@ -464,6 +532,9 @@ local function Setup()
 		if slow >= 10 then
 			slow = 0
 			dirty = true
+		end
+		if expandID and GetTime() > expandUntil then
+			dirty = true -- the hovered rare's extra pins have had their time
 		end
 		if dirty and elapsed >= 0.5 then
 			elapsed = 0

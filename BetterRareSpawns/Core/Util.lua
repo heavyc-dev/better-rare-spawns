@@ -118,6 +118,48 @@ function Util.Translate(fromMap, x, y, toMap)
 	return (rect[1] + (rect[2] - rect[1]) * x / 100) * 100, (rect[3] + (rect[4] - rect[3]) * y / 100) * 100
 end
 
+local worldRects = {}
+
+--- Where a map lies in the world: { continent, top, left, width, height } in
+-- yards, or false. World x grows northward and world y westward, so "top" is
+-- the world x of the map's upper edge and "left" the world y of its left edge.
+local function WorldRect(mapID)
+	local rect = worldRects[mapID]
+	if rect == nil then
+		rect = false
+		if C_Map.GetWorldPosFromMapPos and CreateVector2D then
+			local okA, continentA, corner = pcall(C_Map.GetWorldPosFromMapPos, mapID, CreateVector2D(0, 0))
+			local okB, continentB, middle = pcall(C_Map.GetWorldPosFromMapPos, mapID, CreateVector2D(0.5, 0.5))
+			if okA and okB and corner and middle and continentA and continentA == continentB then
+				local top, left = corner:GetXY()
+				local midX, midY = middle:GetXY()
+				local width, height = (left - midY) * 2, (top - midX) * 2
+				if width > 0 and height > 0 then
+					rect = { continentA, top, left, width, height }
+				end
+			end
+		end
+		worldRects[mapID] = rect
+	end
+	return rect
+end
+
+--- Converts a position on one zone map into the coordinates of another zone
+-- map on the same continent (both 0-100; the result may lie outside 0-100
+-- when the point is beyond that map's edge). Nil when they cannot be related.
+function Util.ToMap(fromMap, x, y, toMap)
+	if fromMap == toMap then
+		return x, y
+	end
+	local from, to = WorldRect(fromMap), WorldRect(toMap)
+	if not from or not to or from[1] ~= to[1] then
+		return nil
+	end
+	local worldX = from[2] - y / 100 * from[5]
+	local worldY = from[3] - x / 100 * from[4]
+	return (to[3] - worldY) / to[4] * 100, (to[2] - worldX) / to[5] * 100
+end
+
 --- Distance in yards between two positions on the same map, or nil.
 function Util.Distance(mapA, xA, yA, mapB, xB, yB)
 	if mapA ~= mapB then

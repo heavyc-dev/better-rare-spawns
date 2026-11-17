@@ -36,6 +36,7 @@ local defaults = {
 		alpha = 1.0,
 		continent = true, -- show active rares on continent maps
 		labels = false,
+		compact = true, -- one pin per rare; its other spawn points show on hover
 		minLevel = 0,
 	},
 	minimap = {

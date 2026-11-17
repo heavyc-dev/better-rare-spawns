@@ -43,14 +43,15 @@ local LAYOUT = {
 		{ "map", "enabled", "Show pins on the world map" },
 		{ "map", "continent", "Show active rares on continent maps" },
 		{ "map", "labels", "Show names under pins" },
+		{ "map", "compact", "One pin per rare (hover shows the rest)" },
 		{ "map", "scale", "Pin size", { 0.8, 1.0, 1.25, 1.5 }, "%.2fx" },
 		{ "map", "minLevel", "Hide rares below level", { 0, 10, 20, 30, 40, 50 }, "%d" },
+	},
+	{
+		title = "Minimap, sharing and list",
 		{ "minimap", "enabled", "Show pins on the minimap" },
 		{ "minimap", "scale", "Minimap pin size", { 0.8, 1.0, 1.25, 1.5 }, "%.2fx" },
 		{ "minimap", "button", "Show the minimap button" },
-	},
-	{
-		title = "Sharing and list",
 		{ "share", "guild", "Share sightings with my guild" },
 		{ "share", "group", "Share sightings with my group" },
 		{ "share", "receive", "Use what others share" },
@@ -66,6 +67,7 @@ local ROW = 24
 local COLUMN_WIDTH = 270
 
 local widgets = {}
+local CreateBinder
 
 local function Changed()
 	ns.Fire("SETTINGS_CHANGED")
@@ -120,9 +122,137 @@ local function CreateCycle(parent, section, key, label, values, format)
 	return button
 end
 
+-------------------------------------------------------------------------------
+-- Scan key binder: click, press a key, done. The same binding is also listed
+-- under Key Bindings > AddOns.
+-------------------------------------------------------------------------------
+
+local SCAN_BINDING = "CLICK BetterRareSpawnsScan:LeftButton"
+local MODIFIER_KEYS = {
+	LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true,
+	LMETA = true, RMETA = true, UNKNOWN = true,
+}
+local binder
+
+local function SaveKeys()
+	if SaveBindings and GetCurrentBindingSet then
+		pcall(SaveBindings, GetCurrentBindingSet())
+	end
+end
+
+local function ClearScanKeys()
+	local keys = { GetBindingKey(SCAN_BINDING) }
+	for _, key in ipairs(keys) do
+		if type(key) == "string" then
+			SetBinding(key) -- no command: unbinds the key
+		end
+	end
+end
+
+--- Binds `key` (already carrying its modifiers) to the scan button.
+-- Returns true, or false and the reason.
+function Options.BindScanKey(key)
+	if InCombatLockdown() then
+		return false, "Keys cannot be changed in combat."
+	end
+	if not (SetBinding and GetBindingKey) then
+		return false, "This client does not let addons set key bindings."
+	end
+	local previous = GetBindingAction and GetBindingAction(key)
+	ClearScanKeys()
+	if not SetBinding(key, SCAN_BINDING) then
+		return false, "The game refused " .. key .. "."
+	end
+	SaveKeys()
+	if type(previous) == "string" and previous ~= "" and previous ~= SCAN_BINDING then
+		local label = _G["BINDING_NAME_" .. previous] or previous
+		ns.Print(key .. " was bound to '" .. tostring(label) .. "' - it now scans for rares.")
+	else
+		ns.Print("Scan key set to " .. key .. ".")
+	end
+	return true
+end
+
+function Options.UnbindScanKey()
+	if InCombatLockdown() or not (SetBinding and GetBindingKey) then
+		return false
+	end
+	ClearScanKeys()
+	SaveKeys()
+	ns.Print("Scan key unbound.")
+	return true
+end
+
+local function StopListening()
+	binder.listening = false
+	binder:EnableKeyboard(false)
+	Options.Refresh()
+end
+
+CreateBinder = function()
+	binder = Style.Button(frame, "", 150, 22)
+	binder:SetPoint("BOTTOMLEFT", 22, 72)
+	binder:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	binder:EnableKeyboard(false)
+
+	binder.note = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	binder.note:SetPoint("LEFT", binder, "RIGHT", 8, 0)
+	binder.note:SetPoint("RIGHT", frame, "RIGHT", -24, 0)
+	binder.note:SetJustifyH("LEFT")
+	binder.note:SetText("One key that targets any rare near you. Click to set, right-click to clear.")
+
+	function binder.Update()
+		if binder.listening then
+			binder:SetText("Press a key...")
+		else
+			local key = GetBindingKey and GetBindingKey(SCAN_BINDING)
+			binder:SetText(key and ("Scan key: " .. key) or "Bind Scan Key")
+		end
+	end
+
+	binder:SetScript("OnClick", function(_, mouseButton)
+		if mouseButton == "RightButton" then
+			binder.listening = false
+			binder:EnableKeyboard(false)
+			Options.UnbindScanKey()
+			Options.Refresh()
+			return
+		end
+		if InCombatLockdown() then
+			ns.Print("Keys cannot be changed in combat.")
+			return
+		end
+		binder.listening = not binder.listening
+		binder:EnableKeyboard(binder.listening)
+		if binder.SetPropagateKeyboardInput then
+			pcall(binder.SetPropagateKeyboardInput, binder, false)
+		end
+		binder.Update()
+	end)
+	binder:SetScript("OnKeyDown", function(_, key)
+		if not binder.listening or MODIFIER_KEYS[key] then
+			return
+		end
+		if key == "ESCAPE" then
+			return StopListening()
+		end
+		local full = (IsAltKeyDown() and "ALT-" or "") .. (IsControlKeyDown() and "CTRL-" or "") .. (IsShiftKeyDown() and "SHIFT-" or "") .. key
+		local ok, reason = Options.BindScanKey(full)
+		if not ok then
+			ns.Print(reason)
+		end
+		StopListening()
+	end)
+	binder:SetScript("OnHide", function()
+		binder.listening = false
+		binder:EnableKeyboard(false)
+	end)
+	widgets[#widgets + 1] = binder
+end
+
 local function Create()
 	frame = Style.Frame("Frame", "BetterRareSpawnsOptions", UIParent)
-	frame:SetSize(600, 600)
+	frame:SetSize(600, 640)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:Hide() -- new frames start shown
@@ -165,6 +295,8 @@ local function Create()
 	frame.info:SetPoint("BOTTOMLEFT", 24, 50)
 	frame.info:SetPoint("RIGHT", -24, 0)
 	frame.info:SetJustifyH("LEFT")
+
+	CreateBinder()
 
 	local journal = Style.Button(frame, "Rare Journal", 104, 22, function()
 		ns.Fire("OPEN_JOURNAL")
@@ -212,10 +344,8 @@ function Options.Refresh()
 			timers = timers + 1
 		end
 	end
-	local key1 = GetBindingKey and GetBindingKey("CLICK BetterRareSpawnsScan:LeftButton")
-	frame.info:SetText(string.format(
-		"%d rares known (%d seen by you, %d with a learned respawn).  Scan key: %s",
-		ns.Rares.Count(), learned, timers, key1 or "not bound - set it under Key Bindings > AddOns"))
+	frame.info:SetText(string.format("%d rares known (%d seen by you, %d with a learned respawn).",
+		ns.Rares.Count(), learned, timers))
 end
 
 function Options.Toggle()

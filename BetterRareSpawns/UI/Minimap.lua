@@ -61,29 +61,57 @@ local function CreatePin(index)
 	return pin
 end
 
-local function RebuildPoints(mapID)
-	wipe(points)
-	pointsMap = mapID
-	pointsDirty = false
-	local list = mapID and Rares.OnMap(mapID)
-	if not list then
-		return
+-- How far beyond the edge of the player's map (in map percent) a point of a
+-- neighbouring zone is still kept. The minimap shows at most ~230 yards.
+local EDGE = 25
+
+--- Adds a point given on `zoneMap`. mx, my are its coordinates on the
+-- player's map, which is what the minimap maths works in; map, x, y stay as
+-- the rare's own for the hover card.
+local function AddPoint(entry, state, zoneMap, x, y, playerMap)
+	local mx, my = x, y
+	if zoneMap ~= playerMap then
+		mx, my = Util.ToMap(zoneMap, x, y, playerMap)
+		if not mx or mx < -EDGE or mx > 100 + EDGE or my < -EDGE or my > 100 + EDGE then
+			return
+		end
 	end
+	points[#points + 1] = { id = entry.id, map = zoneMap, x = x, y = y, mx = mx, my = my, state = state, rank = entry.rank }
+end
+
+local function AddZone(zoneMap, list, playerMap)
 	for _, entry in ipairs(list) do
 		if not Rares.IsIgnored(entry.id) then
 			local state = Respawn.GetState(entry.id, nil, scratchState).state
 			local liveX, liveY
 			if state == "up" then
-				liveX, liveY = Status.LivePoint(entry.id, mapID)
+				liveX, liveY = Status.LivePoint(entry.id, zoneMap)
 			end
 			if liveX then
-				points[#points + 1] = { id = entry.id, map = mapID, x = liveX, y = liveY, state = state, rank = entry.rank }
+				AddPoint(entry, state, zoneMap, liveX, liveY, playerMap)
 			else
-				local spawn = entry.spawns[mapID]
+				local spawn = entry.spawns[zoneMap]
 				for i = 1, #spawn, 2 do
-					points[#points + 1] = { id = entry.id, map = mapID, x = spawn[i], y = spawn[i + 1], state = state, rank = entry.rank }
+					AddPoint(entry, state, zoneMap, spawn[i], spawn[i + 1], playerMap)
 				end
 			end
+		end
+	end
+end
+
+--- Every point worth drawing: the player's zone, plus the parts of other
+-- zones on the same continent that lie just across its border.
+local function RebuildPoints(mapID)
+	wipe(points)
+	pointsMap = mapID
+	pointsDirty = false
+	local maps = mapID and Rares.Maps()
+	if not maps then
+		return
+	end
+	for zoneMap, list in pairs(maps) do
+		if zoneMap == mapID or Util.ToMap(zoneMap, 50, 50, mapID) then
+			AddZone(zoneMap, list, mapID)
 		end
 	end
 end
@@ -123,11 +151,11 @@ local function Update()
 	if facing then
 		sin, cos = math.sin(facing), math.cos(facing)
 	end
-	local tracked = ns.tracked and ns.tracked.map == mapID and ns.tracked.id
+	local tracked = ns.tracked and ns.tracked.id
 
 	local used = 0
 	for _, point in ipairs(points) do
-		local dx, dy = Util.Offset(mapID, px, py, point.x, point.y)
+		local dx, dy = Util.Offset(mapID, px, py, point.mx, point.my)
 		if dx then
 			-- Map y grows southward; screen y grows upward.
 			local sx, sy = dx, -dy

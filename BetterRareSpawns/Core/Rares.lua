@@ -592,6 +592,14 @@ function Rares.ImportQuestie(force)
 	return true
 end
 
+--- Forgets what the player taught the addon about one rare.
+function Rares.Forget(npcID)
+	if ns.db.learned[npcID] then
+		ns.db.learned[npcID] = nil
+		Rebuild()
+	end
+end
+
 --- Drops the imported cache (learned data is kept).
 function Rares.ClearImported()
 	ns.db.imported = nil

@@ -17,6 +17,7 @@ local HELP = {
 	"/brs import - re-read rares from QuestieDB",
 	"/brs forget - clear learned timers and sightings",
 	"/brs stats - what the addon knows",
+	"/brs setup - check what still needs setting up",
 }
 
 local commands = {}
@@ -155,6 +156,13 @@ function commands.kills()
 	ns.Print(string.format("%d of %d rares killed, %d kills in all.", killed, total, count))
 end
 
+function commands.welcome()
+	if ns.Welcome.Show(true) == 0 then
+		ns.Print("Everything is set up.")
+	end
+end
+commands.setup = commands.welcome
+
 function commands.help()
 	for _, line in ipairs(HELP) do
 		ns.Print(line)
@@ -198,10 +206,3 @@ end
 function BetterRareSpawns_OnCompartmentLeave()
 	GameTooltip:Hide()
 end
-
-ns.Listen("READY", function()
-	if not ns.db.welcomed then
-		ns.db.welcomed = true
-		ns.Print("loaded. /brs for the rare journal, /brs list for the zone list, /brs config for options.")
-	end
-end)

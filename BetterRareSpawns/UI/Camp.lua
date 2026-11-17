@@ -219,8 +219,6 @@ function Camp.Toggle()
 	end
 end
 
-local nameplateHintGiven = false
-
 --- Says once, on screen and in chat, that the player has walked into a rare's
 -- spawn area and what its timer says. Without this, arriving at a spawn point
 -- whose rare is not up (or not yet noticed) shows nothing at all.
@@ -245,8 +243,8 @@ local function Notice(now)
 	end
 
 	-- Walking past a rare only notices it through its nameplate.
-	if not nameplateHintGiven and ns.db.settings.detect.nameplate and GetCVar and GetCVar("nameplateShowEnemies") == "0" then
-		nameplateHintGiven = true
+	if not ns.nameplateHintGiven and ns.db.settings.detect.nameplate and GetCVar and GetCVar("nameplateShowEnemies") == "0" then
+		ns.nameplateHintGiven = true
 		ns.Print("Enemy nameplates are off, so a rare is only noticed when you mouse over it, target it or press the scan key. Turn on enemy nameplates (V by default) to have it noticed as you walk up.")
 	end
 end

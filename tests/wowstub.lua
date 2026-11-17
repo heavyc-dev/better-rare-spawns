@@ -266,7 +266,18 @@ function FlashClientIcon() T.flashed = true end
 function GetCVar() return "0" end
 function GetPlayerFacing() return 0 end
 function GetNumLootItems() return 0 end
-function GetBindingKey() return nil end
+T.bindings = {} -- [key] = command
+function GetBindingKey(command)
+	for key, bound in pairs(T.bindings) do
+		if bound == command then return key end
+	end
+	return nil
+end
+function GetBindingAction(key) return T.bindings[key] or "" end
+function SetBinding(key, command) T.bindings[key] = command return true end
+function SaveBindings() T.bindingsSaved = true end
+function GetCurrentBindingSet() return 1 end
+function CreateVector2D(x, y) return { x = x, y = y, GetXY = function() return x, y end } end
 function ChatEdit_GetActiveWindow() return nil end
 function ChatFrame_OpenChat(text) T.chat[#T.chat + 1] = text end
 SOUNDKIT = { RAID_WARNING = 8959 }
@@ -291,6 +302,13 @@ C_Map = {
 	end,
 	GetMapInfo = function(mapID) return maps[mapID] end,
 	GetMapWorldSize = function() return 3000, 2000 end,
+	-- Elwynn (1429) and Redridge (1433) side by side: Redridge starts where
+	-- Elwynn ends, 3000 yards further east (world y falls eastward).
+	GetWorldPosFromMapPos = function(mapID, point)
+		local left = ({ [1429] = 0, [1433] = -3000 })[mapID]
+		if not left then return nil end
+		return 0, Vector(1000 - point.y * 2000, left - point.x * 3000)
+	end,
 	GetMapRectOnMap = function(from, to)
 		if to == 1415 and from == 1429 then return 0.4, 0.5, 0.6, 0.7 end
 		if to == 1415 and from == 1433 then return 0.5, 0.6, 0.6, 0.7 end
@@ -311,7 +329,10 @@ C_ChatInfo = {
 	RegisterAddonMessagePrefix = noop,
 	SendAddonMessage = function(prefix, message, channel) T.sent[#T.sent + 1] = { prefix, message, channel } end,
 }
-C_AddOns = { GetAddOnMetadata = function() return "1.1.2" end }
+C_AddOns = {
+	GetAddOnMetadata = function() return "1.1.2" end,
+	IsAddOnLoaded = function(name) return T.addons and T.addons[name] or false end,
+}
 EventRegistry = { RegisterCallback = function(_, _, fn) T.mapSet = fn end }
 
 return T
