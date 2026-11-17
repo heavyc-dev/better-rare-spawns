@@ -1,7 +1,7 @@
 # BetterRareSpawns
 
 A rare spawn tracker for World of Warcraft (built and tested against the `wowf` client, Interface 16001).
-No libraries, no bundled art, about 150 KB.
+No libraries, no bundled art, about 200 KB.
 
 ## What it does
 
@@ -16,10 +16,23 @@ No libraries, no bundled art, about 150 KB.
   list every rare in one card.
 - **Minimap dots**, with the tracked rare pinned to the rim when it is out of range.
 - **Rare journal** (`/brs`): a book of every known rare in the game's spellbook frame. Twelve to a page,
-  with tabs (all, this zone, active, seen by you, hidden), search by name, zone, level or drop, and zone /
+  with tabs (all, this zone, active, wanted, not killed yet, dungeon rares, beast families, seen by you,
+  hidden), search by name, zone, level, pet family or drop, and zone /
   level / sort filters. Each rare has its own page: 3D model, level, health, where it spawns, its timer,
   and its drops as item buttons with the normal item tooltips.
 - **Zone list** (`/brs list`) for the current zone, most promising first.
+- **Kill log**: kills you got credit for (group kill or loot), with first-kill date, a tick on the map pin and
+  journal row, and "killed 42 / 438" progress.
+- **Wanted list**: star a rare, or right-click one of its drops to want that item (every rare dropping it
+  becomes wanted). Wanted rares alert louder, stay on the continent map, and raise a notice when their spawn
+  window opens, wherever you are.
+- **Camp bar**: stand at a spawn point for a few seconds (or `/brs camp`) and a bar counts down to the spawn
+  window, with a sound when it opens.
+- **Announce**: one click on the alert or the journal page tells your group or guild; shift-click says it in
+  General. Only ever on your click.
+- **Guild sync**: at login the addon asks the guild for its recent deaths and learned respawn times; one
+  member answers.
+- **Minimap button** with a count of rares that are up, and a data broker feed for bar addons.
 - **Sharing** of sightings, deaths and respawn times with guild and group over hidden addon messages.
 
 ## Controls
@@ -48,6 +61,11 @@ The addon ships no rare database. Rares come from:
    Nothing from it is redistributed here.
 
 Drops you loot yourself are recorded too, with a count, and are listed first.
+
+Also read from QuestieDB: quests a rare starts, drops that start a quest, and which rares live in dungeons.
+Two things no database here knows are learned from the game itself: the pet family (from the living
+creature) and whether the corpse can be skinned, mined or picked (from its tooltip). Those appear once you
+have met the rare.
 
 ## Look
 

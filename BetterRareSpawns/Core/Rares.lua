@@ -46,6 +46,14 @@ local function MergeInto(entry, source, origin)
 	entry.health = entry.health or source.health
 	entry.sub = entry.sub or source.sub
 	entry.friendly = entry.friendly or source.friendly
+	entry.dungeon = entry.dungeon or source.dungeon
+	entry.quests = entry.quests or source.quests
+	entry.family = entry.family or source.family
+	entry.skin = entry.skin or source.skin
+	entry.dungeon = entry.dungeon or source.dungeon
+	entry.quests = entry.quests or source.quests
+	entry.family = entry.family or source.family
+	entry.skin = entry.skin or source.skin
 	entry[origin] = true
 	if source.spawns then
 		for mapID, points in pairs(source.spawns) do
@@ -173,6 +181,30 @@ function Rares.LevelText(npcID)
 	return tostring(entry.level)
 end
 
+--- Name of a quest the import met (started by a rare or by a drop), or nil.
+function Rares.QuestName(questID)
+	local names = ns.db.imported and ns.db.imported.questNames
+	return names and names[questID] or nil
+end
+
+--- Quest id started by an item, or nil.
+function Rares.QuestFromItem(itemID)
+	local items = ns.db.imported and ns.db.imported.questItems
+	return items and items[itemID] or nil
+end
+
+--- Name of a quest the import met (started by a rare or by a drop), or nil.
+function Rares.QuestName(questID)
+	local names = ns.db.imported and ns.db.imported.questNames
+	return names and names[questID] or nil
+end
+
+--- Quest id started by an item, or nil.
+function Rares.QuestFromItem(itemID)
+	local items = ns.db.imported and ns.db.imported.questItems
+	return items and items[itemID] or nil
+end
+
 --- Items this rare can drop: { { id = itemID, seen = timesLootedOrNil }, ... }.
 -- What this account looted comes first, then the imported list.
 function Rares.Drops(npcID)
@@ -228,6 +260,24 @@ function Rares.Learn(npcID, info)
 		data.rank = info.rank or data.rank
 		data.type = info.type or data.type
 	end
+	-- Things only the live creature (or its corpse) reveals.
+	if info.family and data.family ~= info.family then
+		data.family = info.family
+		changed = true
+	end
+	if info.skin and data.skin ~= info.skin then
+		data.skin = info.skin
+		changed = true
+	end
+	-- Things only the live creature (or its corpse) reveals.
+	if info.family and data.family ~= info.family then
+		data.family = info.family
+		changed = true
+	end
+	if info.skin and data.skin ~= info.skin then
+		data.skin = info.skin
+		changed = true
+	end
 
 	if info.map and info.x and info.y then
 		-- Only add a point when the merged entry has nothing close to it.
@@ -257,7 +307,7 @@ end
 -- QuestieDB import (optional, runtime only)
 -------------------------------------------------------------------------------
 
-local IMPORT_FORMAT = 2 -- bump to make every account re-read after a change here
+local IMPORT_FORMAT = 3 -- bump to make every account re-read after a change here
 local MAX_DROPS = 60 -- per rare
 local MAX_DROPPERS = 40 -- an item dropped by more creatures than this is a world drop, not this rare's loot
 
@@ -355,9 +405,31 @@ function Rares.ImportQuestie(force)
 	local index, total, found = 1, #ids, 0
 	local BATCH = 300
 
+	local questNames = {} -- [questID] = name, for quests started by a rare or by its drops
+	local questItems = {} -- [itemID] = questID the item starts
+
+	local function QuestName(questID)
+		if questNames[questID] == nil then
+			local questDB = _G.QuestDB
+			local name
+			if type(questDB) == "table" and type(questDB.Get) == "function" then
+				local ok, value = pcall(questDB.Get, questID, "name")
+				name = ok and type(value) == "string" and value or nil
+			end
+			questNames[questID] = name or false
+		end
+	end
+
 	local function Finish(drops, withDrops)
 		importing = false
-		db.imported = { key = key, rares = result, count = found, drops = drops }
+		db.imported = {
+			key = key,
+			rares = result,
+			count = found,
+			drops = drops,
+			questNames = questNames,
+			questItems = questItems,
+		}
 		Rebuild()
 		if withDrops > 0 then
 			ns.Print(string.format("Imported %d rares from QuestieDB (drops known for %d).", found, withDrops))
@@ -388,6 +460,24 @@ function Rares.ImportQuestie(force)
 				if ok and type(droppers) == "table" and #droppers <= MAX_DROPPERS then
 					for _, npcID in ipairs(droppers) do
 						if result[npcID] then
+							if questItems[itemID] == nil then
+								local okQuest, questID = pcall(itemDB.Get, itemID, "startQuest")
+								if okQuest and type(questID) == "number" and questID > 0 then
+									questItems[itemID] = questID
+									QuestName(questID)
+								else
+									questItems[itemID] = false
+								end
+							end
+							if questItems[itemID] == nil then
+								local okQuest, questID = pcall(itemDB.Get, itemID, "startQuest")
+								if okQuest and type(questID) == "number" and questID > 0 then
+									questItems[itemID] = questID
+									QuestName(questID)
+								else
+									questItems[itemID] = false
+								end
+							end
 							local list = drops[npcID]
 							if not list then
 								list = {}
@@ -405,6 +495,11 @@ function Rares.ImportQuestie(force)
 			if itemIndex <= itemTotal then
 				C_Timer.After(0, function() ns.SafeCall(ItemStep) end)
 			else
+				for itemID, questID in pairs(questItems) do
+					if not questID then
+						questItems[itemID] = nil
+					end
+				end
 				Finish(drops, withDrops)
 			end
 		end
@@ -425,6 +520,8 @@ function Rares.ImportQuestie(force)
 				local _, health = pcall(npcDB.Get, npcID, "maxLevelHealth")
 				local _, sub = pcall(npcDB.Get, npcID, "subName")
 				local _, friendly = pcall(npcDB.Get, npcID, "friendlyToFaction")
+				local _, questStarts = pcall(npcDB.Get, npcID, "questStarts")
+				local _, questStarts = pcall(npcDB.Get, npcID, "questStarts")
 				local data = {
 					name = type(name) == "string" and name or nil,
 					level = type(level) == "number" and level or nil,
@@ -435,17 +532,42 @@ function Rares.ImportQuestie(force)
 					rank = rankName,
 					spawns = {},
 				}
+				if type(questStarts) == "table" and #questStarts > 0 then
+					data.quests = {}
+					for i = 1, math.min(#questStarts, 4) do
+						if type(questStarts[i]) == "number" then
+							data.quests[#data.quests + 1] = questStarts[i]
+							QuestName(questStarts[i])
+						end
+					end
+				end
+				if type(questStarts) == "table" and #questStarts > 0 then
+					data.quests = {}
+					for i = 1, math.min(#questStarts, 4) do
+						if type(questStarts[i]) == "number" then
+							data.quests[#data.quests + 1] = questStarts[i]
+							QuestName(questStarts[i])
+						end
+					end
+				end
 				if type(spawns) == "table" then
 					for areaID, points in pairs(spawns) do
 						local mapID = resolve(areaID)
-						if mapID and type(points) == "table" then
-							local list = data.spawns[mapID] or {}
-							data.spawns[mapID] = list
+						if type(points) == "table" then
 							for _, point in ipairs(points) do
 								local x, y = point[1], point[2]
-								-- -1/-1 marks "inside an instance" in the source data.
 								if type(x) == "number" and type(y) == "number" and x > 0 and y > 0 and x <= 100 and y <= 100 then
-									AddPoint(list, x, y)
+									if mapID then
+										local list = data.spawns[mapID]
+										if not list then
+											list = {}
+											data.spawns[mapID] = list
+										end
+										AddPoint(list, x, y)
+									end
+								elseif x == -1 and not data.dungeon then
+									-- -1/-1 marks "inside an instance" in the source data.
+									data.dungeon = (C_Map.GetAreaInfo and C_Map.GetAreaInfo(areaID)) or "Dungeon"
 								end
 							end
 						end

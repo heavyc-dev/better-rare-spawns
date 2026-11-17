@@ -26,6 +26,10 @@ local defaults = {
 		reports = true, -- alert on sightings reported by other players
 		instances = false,
 		mark = false, -- put a raid marker on the rare when targeted
+		windows = true, -- notice when a wanted rare's spawn window opens
+		wanted = true, -- extra sound and screen message for wanted rares
+		windows = true, -- notice when a wanted rare's spawn window opens
+		wanted = true, -- extra sound and screen message for wanted rares
 	},
 	map = {
 		enabled = true,
@@ -38,11 +42,17 @@ local defaults = {
 	minimap = {
 		enabled = true,
 		scale = 1.0,
+		button = true,
+		angle = 205, -- degrees around the minimap
+	},
+	camp = {
+		enabled = true, -- show the camp bar when waiting at a spawn point
 	},
 	share = {
 		guild = true,
 		group = true,
 		receive = true,
+		sync = true, -- ask the guild for its timers at login, and answer others
 	},
 	tracker = {
 		shown = false,
@@ -85,6 +95,12 @@ function DB.Load()
 	db.timers = db.timers or {} -- [npcID] = respawn record, see Respawn.lua
 	db.loot = db.loot or {} -- [npcID] = { [itemID] = timesSeen }
 	db.ignored = db.ignored or {} -- [npcID] = true
+	db.kills = db.kills or {} -- [npcID] = { n, first, last } kills this account got credit for
+	db.wanted = db.wanted or {} -- [npcID] = true
+	db.wantedItems = db.wantedItems or {} -- [itemID] = true
+	db.kills = db.kills or {} -- [npcID] = { n, first, last } kills this account got credit for
+	db.wanted = db.wanted or {} -- [npcID] = true
+	db.wantedItems = db.wantedItems or {} -- [itemID] = true
 	db.names = db.names or {} -- [locale] = { [npcID] = localized name }
 	db.windows = db.windows or {} -- saved frame positions
 

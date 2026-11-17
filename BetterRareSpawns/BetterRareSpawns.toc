@@ -2,7 +2,7 @@
 ## Title: BetterRareSpawns
 ## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, a journal of every rare and its drops, and sharing with guild and group.
 ## Author: BetterRareSpawns contributors
-## Version: 0.2.0
+## Version: 0.3.0
 ## SavedVariables: BetterRareSpawnsDB
 ## OptionalDeps: QuestieDB, TomTom
 ## Category: Map
@@ -17,6 +17,7 @@ Core\Util.lua
 Core\Respawn.lua
 Core\Rares.lua
 Core\Status.lua
+Core\Hunt.lua
 Core\Detect.lua
 Core\Share.lua
 Core\Scan.lua
@@ -27,5 +28,7 @@ UI\Minimap.lua
 UI\Alerts.lua
 UI\Tracker.lua
 UI\Journal.lua
+UI\Camp.lua
+UI\MinimapButton.lua
 UI\Options.lua
 Core\Commands.lua

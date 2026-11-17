@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 
 ns.ADDON = ADDON
-ns.VERSION = "0.2.0"
+ns.VERSION = "0.3.0"
 ns.PREFIX = "|cff4fc3f7BRS|r"
 
 -------------------------------------------------------------------------------

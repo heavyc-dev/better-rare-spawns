@@ -33,6 +33,9 @@ Style.TEX = {
 	bookIcon = "Interface\\Spellbook\\Spellbook-Icon",
 	bookTab = "Interface\\SpellBook\\SpellBook-SkillLineTab",
 	questionMark = "Interface\\Icons\\INV_Misc_QuestionMark",
+	star = "Interface\\COMMON\\FavoritesIcon",
+	check = "Interface\\Buttons\\UI-CheckBox-Check",
+	questAvailable = "Interface\\GossipFrame\\AvailableQuestIcon",
 }
 
 -- Text colours for writing on the book's parchment, where the usual bright

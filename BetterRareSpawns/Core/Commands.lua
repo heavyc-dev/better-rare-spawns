@@ -9,6 +9,10 @@ local HELP = {
 	"/brs config - options",
 	"/brs test - fire a test alert",
 	"/brs find <name> - waypoint to a rare by name",
+	"/brs camp - camp bar for the nearest spawn point (again to close)",
+	"/brs want <name> - add or remove a rare from the wanted list",
+	"/brs sync - ask the guild for its timers now",
+	"/brs kills - kill log summary",
 	"/brs unhide - bring back every rare you hid",
 	"/brs import - re-read rares from QuestieDB",
 	"/brs forget - clear learned timers and sightings",
@@ -100,6 +104,55 @@ function commands.find(rest)
 	else
 		ns.Print("No rare matches \"" .. query .. "\".")
 	end
+end
+
+local function FindByName(rest)
+	local query = strlower(strtrim(rest or ""))
+	if query == "" then
+		return nil
+	end
+	local best
+	for npcID in pairs(Rares.All()) do
+		local name = strlower(Rares.Name(npcID))
+		if name == query then
+			return npcID
+		elseif not best and strfind(name, query, 1, true) then
+			best = npcID
+		end
+	end
+	return best
+end
+
+function commands.camp()
+	ns.Camp.Toggle()
+end
+
+function commands.want(rest)
+	local npcID = FindByName(rest)
+	if not npcID then
+		ns.Print("Usage: /brs want <part of a name>")
+		return
+	end
+	local wanted = not ns.Hunt.IsStarred(npcID)
+	ns.Hunt.SetWanted(npcID, wanted)
+	ns.Print(Rares.Name(npcID) .. (wanted and " is now wanted." or " is no longer wanted."))
+end
+
+function commands.sync()
+	if ns.Share.RequestSync() then
+		ns.Print("Asked the guild for its timers.")
+	else
+		ns.Print("You are not in a guild.")
+	end
+end
+
+function commands.kills()
+	local killed, total = ns.Hunt.Progress()
+	local count = 0
+	for _, kills in pairs(ns.db.kills) do
+		count = count + kills.n
+	end
+	ns.Print(string.format("%d of %d rares killed, %d kills in all.", killed, total, count))
 end
 
 function commands.help()

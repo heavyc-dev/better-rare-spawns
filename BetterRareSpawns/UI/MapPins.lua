@@ -15,7 +15,7 @@ local ADDON, ns = ...
 local MapPins = {}
 ns.MapPins = MapPins
 
-local Util, Rares, Respawn, Status, Card, Style = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card, ns.Style
+local Util, Rares, Respawn, Status, Card, Style, Hunt = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card, ns.Style, ns.Hunt
 
 local PIN_SIZE = 24
 local FOCUS_SECONDS = 20
@@ -108,6 +108,20 @@ local function CreatePin(index)
 	pin.label = pin:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	pin.label:SetPoint("TOP", pin, "BOTTOM", 0, -1)
 
+	-- Wanted star and "you killed this" tick, above the ring.
+	local marks = CreateFrame("Frame", nil, pin)
+	marks:SetAllPoints()
+	marks:SetFrameLevel(pin:GetFrameLevel() + 2)
+	pin.marks = marks
+	pin.star = marks:CreateTexture(nil, "OVERLAY")
+	pin.star:SetTexture(Style.TEX.star)
+	pin.star:SetSize(PIN_SIZE * 0.6, PIN_SIZE * 0.6)
+	pin.star:SetPoint("CENTER", pin, "TOPRIGHT", -3, -3)
+	pin.tick = marks:CreateTexture(nil, "OVERLAY")
+	pin.tick:SetTexture(Style.TEX.check)
+	pin.tick:SetSize(PIN_SIZE * 0.7, PIN_SIZE * 0.7)
+	pin.tick:SetPoint("CENTER", pin, "BOTTOMRIGHT", -3, 4)
+
 	-- Slow pulse for rares that are up right now.
 	local pulse = pin:CreateAnimationGroup()
 	pulse:SetLooping("BOUNCE")
@@ -180,7 +194,7 @@ local function CollectContinent(mapID, items, settings)
 			for _, entry in ipairs(list) do
 				if Passes(entry, settings) then
 					local state = StateOf(entry.id)
-					if ACTIVE[state] then
+					if ACTIVE[state] or Hunt.IsWanted(entry.id) then
 						local _, x, y = Status.BestPoint(entry.id, zoneMap)
 						local px, py
 						if x then
@@ -308,6 +322,18 @@ function MapPins.Refresh()
 		end
 		Style.MedallionRank(pin, elite and "rareelite" or "rare")
 
+		local wanted, killedAll = false, true
+		for _, item in ipairs(cluster.items) do
+			if Hunt.IsWanted(item.id) then
+				wanted = true
+			end
+			if Hunt.Kills(item.id) == 0 then
+				killedAll = false
+			end
+		end
+		pin.star:SetShown(wanted)
+		pin.tick:SetShown(killedAll)
+
 		local many = #cluster.items > 1
 		pin.count:SetText(many and #cluster.items or "")
 		pin.icon:SetShown(not many)
@@ -322,6 +348,7 @@ function MapPins.Refresh()
 		pin:SetPoint("CENTER", overlay, "TOPLEFT", cluster.cx / scale, -cluster.cy / scale)
 		-- More interesting pins sit on top of less interesting ones.
 		pin:SetFrameLevel(overlay:GetFrameLevel() + 20 - (Respawn.PRIORITY[first.state] or 7))
+		pin.marks:SetFrameLevel(pin:GetFrameLevel() + 2)
 		pin:Show()
 
 		if first.state == "up" then
@@ -473,6 +500,7 @@ end)
 ns.Listen("RARES_CHANGED", MapPins.MarkDirty)
 ns.Listen("RARE_UPDATED", MapPins.MarkDirty)
 ns.Listen("TRACK_CHANGED", MapPins.MarkDirty)
+ns.Listen("WANTED_CHANGED", MapPins.MarkDirty)
 ns.Listen("SETTINGS_CHANGED", function()
 	MapPins.Refresh()
 end)

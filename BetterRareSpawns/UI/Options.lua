@@ -21,6 +21,8 @@ local LAYOUT = {
 		{ "alerts", "reports", "Alert on reports from guild / group" },
 		{ "alerts", "instances", "Alert inside dungeons and raids" },
 		{ "alerts", "mark", "Put a skull marker on a targeted rare" },
+		{ "alerts", "wanted", "Louder alert for wanted rares" },
+		{ "alerts", "windows", "Tell me when a wanted rare's window opens" },
 		{ "alerts", "duration", "Alert stays for", { 15, 30, 45, 90 }, "%ds" },
 		{ "alerts", "cooldown", "Same rare alerts again after", { 60, 300, 900, 1800 }, "%ds" },
 	},
@@ -44,12 +46,15 @@ local LAYOUT = {
 		{ "map", "minLevel", "Hide rares below level", { 0, 10, 20, 30, 40, 50 }, "%d" },
 		{ "minimap", "enabled", "Show pins on the minimap" },
 		{ "minimap", "scale", "Minimap pin size", { 0.8, 1.0, 1.25, 1.5 }, "%.2fx" },
+		{ "minimap", "button", "Show the minimap button" },
 	},
 	{
 		title = "Sharing and list",
 		{ "share", "guild", "Share sightings with my guild" },
 		{ "share", "group", "Share sightings with my group" },
 		{ "share", "receive", "Use what others share" },
+		{ "share", "sync", "Swap timers with the guild at login" },
+		{ "camp", "enabled", "Camp bar when waiting at a spawn point" },
 		{ "tracker", "activeOnly", "List: only rares with a timer or sighting" },
 		{ "tracker", "locked", "List: lock position" },
 		{ "tracker", "scale", "List size", { 0.8, 1.0, 1.2, 1.4 }, "%.1fx" },
@@ -116,7 +121,7 @@ end
 
 local function Create()
 	frame = Style.Frame("Frame", "BetterRareSpawnsOptions", UIParent)
-	frame:SetSize(600, 544)
+	frame:SetSize(600, 600)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:Hide() -- new frames start shown

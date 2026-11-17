@@ -239,11 +239,21 @@ function InCombatLockdown() return T.combat end
 function IsInInstance() return T.instance end
 function GetLocale() return "enUS" end
 function IsInGuild() return true end
-function IsInGroup() return false end
+function IsInGroup() return T.grouped end
 function IsInRaid() return false end
 function IsAltKeyDown() return T.alt end
 function IsShiftKeyDown() return T.shift end
 function IsControlKeyDown() return T.ctrl end
+date = os.date
+T.said = {}
+function SendChatMessage(text, chatType, _, target) T.said[#T.said + 1] = { text, chatType, target } end
+function GetChannelList() return 1, "General - Elwynn Forest", false, 2, "Trade", false end
+function UnitCreatureFamily(unit) local data = T.units[unit] return data and data.family end
+UNIT_SKINNABLE_LEATHER = "Skinnable"
+C_TooltipInfo = { GetUnit = function(unit)
+	local data = T.units[unit]
+	return { lines = { { leftText = data and data.name }, { leftText = data and data.tooltip } } }
+end }
 function GetCursorPosition() return 0, 0 end
 T.items = {} -- [itemID] = { name, quality }
 function GetItemInfo(itemID)

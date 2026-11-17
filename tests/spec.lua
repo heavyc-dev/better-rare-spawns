@@ -31,7 +31,7 @@ check("slash command registered", type(SlashCmdList.BETTERRARESPAWNS) == "functi
 section("QuestieDB import")
 local questie = {
 	[100] = { name = "Old Rare", minLevel = 11, maxLevel = 12, maxLevelHealth = 420, subName = "The Ancient", rank = 4, spawns = { [12] = { { 40, 40 }, { 40.5, 40.2 }, { 70, 20 } } } },
-	[101] = { name = "Elite Rare", maxLevel = 25, rank = 2, spawns = { [44] = { { 30, 30 } }, [999] = { { 1, 1 } } } },
+	[101] = { name = "Elite Rare", maxLevel = 25, rank = 2, questStarts = { 501 }, spawns = { [44] = { { 30, 30 } }, [999] = { { 1, 1 } } } },
 	[102] = { name = "Plain Wolf", maxLevel = 5, spawns = { [12] = { { 10, 10 } } } },
 	[103] = { name = "Dungeon Rare", maxLevel = 20, rank = 4, spawns = { [12] = { { -1, -1 } } } },
 }
@@ -44,7 +44,7 @@ LibQuestieDB = { contractVersion = 4, Support = { Get = function()
 end } }
 local questieItems = {
 	[9001] = { npcDrops = { 100 } },
-	[9002] = { npcDrops = { 100, 101, 102 } },
+	[9002] = { npcDrops = { 100, 101, 102 }, startQuest = 502 },
 	[9003] = { npcDrops = { 102 } }, -- only a normal mob drops it
 	[9004] = {}, -- no droppers
 }
@@ -52,6 +52,9 @@ ItemDB = {
 	GetAllIds = function() return { 9001, 9002, 9003, 9004 } end,
 	Get = function(id, key) return questieItems[id] and questieItems[id][key] end,
 }
+QuestDB = { Get = function(id, key)
+	return key == "name" and ({ [501] = "The Elite Menace", [502] = "A Worn Pelt" })[id] or nil
+end }
 T.items[9001] = { "Ancient Fang", 3 }
 T.items[9002] = { "Worn Pelt", 1 }
 T.Advance(5)
@@ -67,6 +70,11 @@ check("level shown as a range", ns.Rares.LevelText(100) == "11-12" and ns.Rares.
 local drops = ns.Rares.Drops(100)
 check("drops imported per rare", #drops == 2 and drops[1].id == 9001 and drops[2].id == 9002, #drops)
 check("drops of normal mobs ignored", #ns.Rares.Drops(102) == 0 and ns.db.imported.drops[102] == nil)
+check("dungeon rare flagged with its instance", ns.Rares.Get(103).dungeon == "Elwynn Forest", ns.Rares.Get(103).dungeon)
+check("quests started by a rare imported", ns.Rares.Get(101).quests and ns.Rares.Get(101).quests[1] == 501
+	and ns.Rares.QuestName(501) == "The Elite Menace")
+check("quest-starting drops imported", ns.Rares.QuestFromItem(9002) == 502 and ns.Rares.QuestName(502) == "A Worn Pelt"
+	and ns.Rares.QuestFromItem(9001) == nil)
 local key = ns.db.imported.key
 check("second import is skipped while the cache is current", ns.Rares.ImportQuestie(false) == false and ns.db.imported.key == key)
 
@@ -353,6 +361,191 @@ ns.MapPins.Focus(100)
 Journal.Toggle(false)
 check("journal closes", not BetterRareSpawnsJournal:IsShown())
 check("no Lua errors in the journal", #T.errors == 0, T.errors[1])
+
+-------------------------------------------------------------------------------
+section("kill log")
+local Hunt = ns.Hunt
+local killsBefore = Hunt.Kills(100)
+T.Fire("PARTY_KILL", "Player-1-0001", Guid(100, "KILL000001"))
+check("group kill counts once", Hunt.Kills(100) == killsBefore + 1, Hunt.Kills(100))
+T.Fire("PARTY_KILL", "Player-1-0001", Guid(100, "KILL000001"))
+check("same creature is not counted twice", Hunt.Kills(100) == killsBefore + 1)
+T.Fire("UNIT_DIED", Guid(101, "KILL000002"))
+check("a death merely witnessed is not a kill", Hunt.Kills(101) == 0)
+local killed, known = Hunt.Progress()
+check("progress counts rares, not kills", killed >= 1 and killed < known and known == ns.Rares.Count(), killed .. "/" .. known)
+Journal.Toggle(true)
+Journal.SetFilter("level", "any")
+Journal.SetFilter("tab", "todo")
+check("not-killed tab leaves out killed rares", not Ids():find("100") and Ids():find("101"), Ids())
+
+-------------------------------------------------------------------------------
+section("wanted list")
+check("nothing wanted at first", not Hunt.IsWanted(101))
+Hunt.SetWanted(101, true)
+Journal.SetFilter("tab", "wanted")
+check("starred rare is wanted", Hunt.IsWanted(101) and Ids() == "101", Ids())
+Hunt.SetWantedItem(9001, true)
+Journal.Refresh()
+check("a wanted drop makes its rare wanted", Hunt.IsWanted(100) and not Hunt.IsStarred(100) and Ids():find("100"), Ids())
+Hunt.SetWantedItem(9001, false)
+check("un-starring the drop releases the rare", not Hunt.IsWanted(100))
+T.mapShown = 1415
+ns.MapPins.Refresh()
+local wantedOnContinent = false
+for _, frame in ipairs(T.frames) do
+	if frame.items and frame.__parent == BetterRareSpawnsMapOverlay and frame:IsShown() then
+		for _, item in ipairs(frame.items) do
+			if item.id == 101 then wantedOnContinent = true end
+		end
+	end
+end
+check("wanted rare stays on the continent map", wantedOnContinent)
+T.mapShown = 1429
+
+T.sound = nil
+T.units.nameplate7 = { guid = Guid(101, "WANT000001"), name = "Elite Rare", level = 25, class = "rareelite" }
+T.Fire("NAME_PLATE_UNIT_ADDED", "nameplate7")
+T.Advance(1)
+check("wanted rare plays the second alert sound", T.sound == 12889, T.sound)
+
+-- Window watch: kill it, learn a 300 s respawn, wait for the window.
+local R2 = ns.Respawn
+R2.AddSample(101, 300)
+T.Fire("UNIT_DIED", Guid(101, "WANT000001"))
+T.Advance(10)
+check("wanted rare is on its timer", R2.GetState(101).state == "dead", R2.GetState(101).state)
+local chatBefore = #T.chat
+T.sound = nil
+T.Advance(400)
+local opened = false
+for i = chatBefore + 1, #T.chat do
+	if tostring(T.chat[i]):find("spawn window just opened") then opened = true end
+end
+check("window opening is announced to the player", opened and T.sound == 12889, T.sound)
+local repeats = 0
+chatBefore = #T.chat
+T.Advance(60)
+for i = chatBefore + 1, #T.chat do
+	if tostring(T.chat[i]):find("spawn window just opened") then repeats = repeats + 1 end
+end
+check("and only once", repeats == 0, repeats)
+
+-------------------------------------------------------------------------------
+section("announce")
+local text = Hunt.AnnounceText(100)
+check("announce line has name, level and place", text:find("^Rare: Old Rare %(11%-12%)") and text:find("Elwynn Forest"), text)
+T.said = {}
+check("goes to the guild when not grouped", Hunt.Announce(100) == "GUILD" and #T.said == 1 and T.said[1][2] == "GUILD")
+check("no repeat within the gap", Hunt.Announce(100) == nil and #T.said == 1)
+T.grouped = true
+check("goes to the party when grouped", Hunt.Announce(101) == "PARTY" and T.said[2][2] == "PARTY")
+T.grouped = false
+check("general channel found by name", Hunt.Announce(555, "general") == "CHANNEL" and T.said[3][3] == 1, T.said[3] and T.said[3][3])
+
+-------------------------------------------------------------------------------
+section("guild sync")
+T.sent = {}
+T.Advance(3)
+T.sent = {}
+ns.Share.OnMessage("BRS1", "Q:1", "GUILD", "Newcomer-Realm")
+T.Advance(60)
+local sawZ, sawD, sawR = false, false, false
+for _, message in ipairs(T.sent) do
+	if message[3] == "GUILD" then
+		if message[2] == "Z:1:Newcomer" then sawZ = true end
+		if message[2]:find("^D:101:") then sawD = true end
+		if message[2]:find("^R:101:") then sawR = true end
+	end
+end
+check("a request is answered with recent deaths and windows", sawZ and sawD and sawR, #T.sent)
+T.sent = {}
+ns.Share.OnMessage("BRS1", "Q:1", "GUILD", "Other-Realm")
+ns.Share.OnMessage("BRS1", "Z:1:Other", "GUILD", "Friend-Realm")
+T.Advance(60)
+check("stays quiet when someone else answers", #T.sent == 0, #T.sent)
+ns.db.settings.share.sync = false
+ns.Share.OnMessage("BRS1", "Q:1", "GUILD", "Third-Realm")
+T.Advance(200)
+check("sync can be turned off", #T.sent == 0, #T.sent)
+ns.db.settings.share.sync = true
+check("request goes out on demand", ns.Share.RequestSync() == true)
+T.Advance(5)
+check("request sent to the guild", T.sent[1] and T.sent[1][2] == "Q:1" and T.sent[1][3] == "GUILD")
+
+-------------------------------------------------------------------------------
+section("creature details learned on sight")
+T.units.mouseover = { guid = Guid(100, "FAM0000001"), name = "Old Rare", level = 12, class = "rare", type = "Beast", family = "Wolf" }
+T.Fire("UPDATE_MOUSEOVER_UNIT")
+check("pet family learned from the living creature", ns.Rares.Get(100).family == "Wolf", ns.Rares.Get(100).family)
+T.units.mouseover = { guid = Guid(100, "FAM0000001"), name = "Old Rare", dead = true, tooltip = "Skinnable" }
+T.Fire("UPDATE_MOUSEOVER_UNIT")
+check("skinnable learned from the corpse tooltip", ns.Rares.Get(100).skin == "Skinning", ns.Rares.Get(100).skin)
+T.units.mouseover = nil
+Journal.SetFilter("tab", "pets")
+check("beast family tab", Ids() == "100", Ids())
+Journal.SetFilter("tab", "dungeon")
+check("dungeon tab", Ids() == "103", Ids())
+Journal.SetFilter("tab", "all")
+Journal.SetSearch("wolf")
+check("search by pet family", Ids() == "100", Ids())
+Journal.SetSearch("")
+Journal.Select(100)
+Journal.Select(101)
+Journal.Select(103)
+Journal.Toggle(false)
+
+-------------------------------------------------------------------------------
+section("camp bar")
+local Camp = ns.Camp
+Camp.Stop(false) -- earlier sections stood on spawn points long enough to raise it
+T.player.map, T.player.x, T.player.y = 1433, 0.30, 0.30 -- on Elite Rare's spawn point
+T.Advance(5)
+check("no bar for someone passing through", Camp.Current() == nil)
+T.Advance(15)
+check("bar appears after standing at a spawn point", Camp.Current() ~= nil and BetterRareSpawnsCamp:IsShown(), Camp.Current())
+check("wanted rare is preferred", Camp.Current() == 101, Camp.Current())
+Camp.Stop(true)
+T.Advance(30)
+check("closing it dismisses that rare", Camp.Current() == nil)
+T.player.x, T.player.y = 0.90, 0.90
+T.Advance(5)
+T.player.x, T.player.y = 0.30, 0.30
+T.Advance(20)
+check("coming back offers it again", Camp.Current() == 101)
+T.player.x, T.player.y = 0.90, 0.90
+T.Advance(15)
+check("walking away takes the bar down", Camp.Current() == nil and not BetterRareSpawnsCamp:IsShown())
+ns.db.settings.camp.enabled = false
+T.player.x, T.player.y = 0.30, 0.30
+T.Advance(20)
+check("automatic bar can be turned off", Camp.Current() == nil)
+SlashCmdList.BETTERRARESPAWNS("camp")
+check("/brs camp still works by hand", Camp.Current() == 101)
+SlashCmdList.BETTERRARESPAWNS("camp")
+ns.db.settings.camp.enabled = true
+T.player.map, T.player.x, T.player.y = 1429, 0.5, 0.5
+
+-------------------------------------------------------------------------------
+section("minimap button")
+check("button exists", BetterRareSpawnsMinimapButton and BetterRareSpawnsMinimapButton:IsShown())
+local up, open = ns.MinimapButton.Refresh()
+check("summary counts are numbers", type(up) == "number" and type(open) == "number")
+BetterRareSpawnsMinimapButton.__scripts.OnEnter(BetterRareSpawnsMinimapButton)
+BetterRareSpawnsMinimapButton.__scripts.OnClick(BetterRareSpawnsMinimapButton, "LeftButton")
+check("click opens the journal", BetterRareSpawnsJournal:IsShown())
+Journal.Toggle(false)
+ns.db.settings.minimap.button = false
+ns.Fire("SETTINGS_CHANGED")
+check("button can be hidden", not BetterRareSpawnsMinimapButton:IsShown())
+ns.db.settings.minimap.button = true
+ns.Fire("SETTINGS_CHANGED")
+SlashCmdList.BETTERRARESPAWNS("kills")
+SlashCmdList.BETTERRARESPAWNS("sync")
+SlashCmdList.BETTERRARESPAWNS("want old")
+check("/brs want stars a rare", Hunt.IsStarred(100))
+SlashCmdList.BETTERRARESPAWNS("want old")
+check("no Lua errors in the new features", #T.errors == 0, T.errors[1])
 
 -------------------------------------------------------------------------------
 section("combat and instances")

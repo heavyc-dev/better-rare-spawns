@@ -6,7 +6,7 @@ local ADDON, ns = ...
 local Detect = {}
 ns.Detect = Detect
 
-local Clean, Util, Rares, Respawn = ns.Clean, ns.Util, ns.Rares, ns.Respawn
+local Clean, Util, Rares, Respawn, Hunt = ns.Clean, ns.Util, ns.Rares, ns.Respawn, ns.Hunt
 
 local RARE_CLASS = { rare = "rare", rareelite = "rareelite" }
 
@@ -36,6 +36,40 @@ end
 ns.OnEvent("ZONE_CHANGED_NEW_AREA", BreakWatch)
 ns.OnEvent("SHARD_TRANSFER", BreakWatch)
 ns.OnEvent("PLAYER_ENTERING_WORLD", BreakWatch)
+
+local SKIN_LINES -- [tooltip text] = kind, built on first use
+
+--- What the corpse under the cursor can be harvested for, read from the
+-- tooltip the game already built ("Skinnable", "Requires Mining", ...).
+local function CorpseHarvest(unit)
+	if not (C_TooltipInfo and C_TooltipInfo.GetUnit) then
+		return nil
+	end
+	if not SKIN_LINES then
+		SKIN_LINES = {}
+		for global, kind in pairs({
+			UNIT_SKINNABLE_LEATHER = "Skinning",
+			UNIT_SKINNABLE_HERB = "Herbalism",
+			UNIT_SKINNABLE_ROCK = "Mining",
+			UNIT_SKINNABLE_BOLTS = "Engineering",
+		}) do
+			if type(_G[global]) == "string" then
+				SKIN_LINES[_G[global]] = kind
+			end
+		end
+	end
+	local ok, data = pcall(C_TooltipInfo.GetUnit, unit)
+	if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then
+		return nil
+	end
+	for _, line in ipairs(data.lines) do
+		local text = Clean(line.leftText)
+		if type(text) == "string" and SKIN_LINES[text] then
+			return SKIN_LINES[text]
+		end
+	end
+	return nil
+end
 
 --- Inspects a unit token. Returns the npcID when it was handled as a rare.
 function Detect.Unit(unit, source)
@@ -78,6 +112,12 @@ function Detect.Unit(unit, source)
 		if Respawn.RecordDeath(npcID, shard, now, true) then
 			ns.Fire("RARE_DIED", npcID, shard, now, true)
 		end
+		if known then
+			local harvest = CorpseHarvest(unit)
+			if harvest then
+				Rares.Learn(npcID, { skin = harvest })
+			end
+		end
 		return npcID
 	end
 
@@ -96,6 +136,7 @@ function Detect.Unit(unit, source)
 		level = level,
 		rank = class,
 		type = Clean(UnitCreatureType(unit)),
+		family = UnitCreatureFamily and Clean(UnitCreatureFamily(unit)) or nil,
 		map = mapID,
 		x = x,
 		y = y,
@@ -302,8 +343,11 @@ local hasUnitDied = ns.OnEvent("UNIT_DIED", function(guid)
 	OnDeath(guid)
 end)
 
+-- A kill by the player or their group: that one counts for the kill log.
 ns.OnEvent("PARTY_KILL", function(_, targetGUID)
+	targetGUID = Clean(targetGUID)
 	OnDeath(targetGUID)
+	Hunt.Credit((Util.ParseGUID(targetGUID)), targetGUID)
 end)
 
 -- Older clients report deaths only through the combat log.
@@ -312,6 +356,9 @@ if not hasUnitDied and CombatLogGetCurrentEventInfo then
 		local _, subEvent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
 		if subEvent == "UNIT_DIED" or subEvent == "PARTY_KILL" then
 			OnDeath(destGUID)
+		end
+		if subEvent == "PARTY_KILL" then
+			Hunt.Credit((Util.ParseGUID(destGUID)), destGUID)
 		end
 	end)
 end
@@ -331,6 +378,7 @@ ns.OnEvent("LOOT_OPENED", function()
 			if Respawn.RecordDeath(npcID, shard, GetServerTime(), true) then
 				ns.Fire("RARE_DIED", npcID, shard, GetServerTime(), true)
 			end
+			Hunt.Credit(npcID, guid) -- loot rights are kill credit
 
 			local key = guid .. ":" .. slot
 			local link = GetLootSlotLink(slot)

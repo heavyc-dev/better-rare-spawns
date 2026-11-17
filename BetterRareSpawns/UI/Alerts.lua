@@ -8,7 +8,7 @@ local ADDON, ns = ...
 local Alerts = {}
 ns.Alerts = Alerts
 
-local Util, Rares, Status, Style = ns.Util, ns.Rares, ns.Status, ns.Style
+local Util, Rares, Status, Style, Hunt = ns.Util, ns.Rares, ns.Status, ns.Style, ns.Hunt
 
 local SOURCE_TEXT = {
 	nameplate = "Nameplate",
@@ -36,7 +36,7 @@ end
 
 local function CreateCard()
 	card = Style.Frame("Button", "BetterRareSpawnsAlert", UIParent, "SecureActionButtonTemplate")
-	card:SetSize(300, 72)
+	card:SetSize(330, 72)
 	card:SetPoint("TOP", UIParent, "TOP", 0, -140)
 	card:SetFrameStrata("HIGH")
 	card:RegisterForClicks("AnyUp", "AnyDown")
@@ -75,6 +75,27 @@ local function CreateCard()
 		end
 	end)
 	way:SetPoint("BOTTOMRIGHT", -8, 8)
+
+	local tell = Style.Button(card, "Announce", 74, 18)
+	tell:SetPoint("RIGHT", way, "LEFT", -4, 0)
+	tell:SetScript("OnClick", function()
+		if shownID then
+			local channel = Hunt.Announce(shownID, IsShiftKeyDown() and "general" or nil)
+			if channel then
+				ns.Print("Announced to " .. strlower(channel) .. ".")
+			end
+		end
+	end)
+	tell:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+		GameTooltip:SetText("Announce")
+		GameTooltip:AddLine("Click: tell your group, or your guild when not grouped", 1, 1, 1)
+		GameTooltip:AddLine("Shift-click: say it in General", 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	tell:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
 
 	card:SetScript("PostClick", function(_, button, down)
 		if button == "RightButton" and not down then
@@ -116,7 +137,8 @@ local function ShowCard(npcID, info)
 
 		local entry = Rares.Get(npcID)
 		local color = Status.RANK_COLORS[entry and entry.rank or "rare"] or Status.RANK_COLORS.rare
-		card.name:SetText(name)
+		local wanted = Hunt.IsWanted(npcID)
+		card.name:SetText(wanted and ("|T" .. Style.TEX.star .. ":14|t " .. name) or name)
 		card.name:SetTextColor(color[1], color[2], color[3])
 		Style.BorderColor(card, color[1], color[2], color[3])
 
@@ -142,7 +164,7 @@ local function ShowCard(npcID, info)
 		if hideTimer then
 			hideTimer:Cancel()
 		end
-		hideTimer = C_Timer.NewTimer(Settings().duration, function()
+		hideTimer = C_Timer.NewTimer(Settings().duration * (wanted and 2 or 1), function()
 			hideTimer = nil
 			if shownID == npcID then
 				Alerts.Dismiss()
@@ -177,9 +199,24 @@ function Alerts.Raise(npcID, info)
 
 	local name = info.name or Rares.Name(npcID)
 
+	local wanted = settings.wanted and Hunt.IsWanted(npcID)
 	if settings.sound then
 		local kit = (SOUNDKIT and SOUNDKIT.RAID_WARNING) or 8959
 		pcall(PlaySound, kit, "Master")
+		if wanted then
+			-- A second, different sound a moment later: this is one you are after.
+			C_Timer.After(0.6, function()
+				pcall(PlaySound, (SOUNDKIT and SOUNDKIT.ALARM_CLOCK_WARNING_3) or 12889, "Master")
+			end)
+		end
+	end
+	if wanted then
+		local text = "WANTED: " .. name
+		if RaidNotice_AddMessage and RaidWarningFrame and ChatTypeInfo and ChatTypeInfo.RAID_WARNING then
+			pcall(RaidNotice_AddMessage, RaidWarningFrame, text, ChatTypeInfo.RAID_WARNING)
+		elseif UIErrorsFrame then
+			UIErrorsFrame:AddMessage(text, 1, 0.82, 0.29)
+		end
 	end
 	if settings.flash and FlashClientIcon then
 		FlashClientIcon()

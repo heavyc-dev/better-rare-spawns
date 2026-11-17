@@ -13,6 +13,7 @@ local Card = {}
 ns.Card = Card
 
 local Util, Rares, Respawn, Status, Style = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Style
+local Hunt = ns.Hunt
 
 local WIDTH = 270
 local PAD = 10
@@ -134,7 +135,7 @@ local function FillBlock(block, item)
 	local entry = Rares.Get(npcID)
 
 	local rankColor = Status.RANK_COLORS[entry and entry.rank or "rare"] or Status.RANK_COLORS.rare
-	block.name:SetText(Rares.Name(npcID))
+	block.name:SetText(Hunt.IsWanted(npcID) and ("|T" .. Style.TEX.star .. ":12|t " .. Rares.Name(npcID)) or Rares.Name(npcID))
 	block.name:SetTextColor(rankColor[1], rankColor[2], rankColor[3])
 
 	local levelText = ""
@@ -180,8 +181,14 @@ local function FillBlock(block, item)
 	if seen and seen.by then
 		lines[#lines + 1] = GREY .. "Reported by " .. WHITE .. seen.by .. "|r"
 	end
-	if rec and (rec.kills or 0) > 0 then
+	local kills = Hunt.Kills(npcID)
+	if kills > 0 then
+		lines[#lines + 1] = GREY .. "Killed by you: " .. WHITE .. kills .. "|r"
+	elseif rec and (rec.kills or 0) > 0 then
 		lines[#lines + 1] = GREY .. "Deaths witnessed: " .. WHITE .. rec.kills .. "|r"
+	end
+	if entry and entry.dungeon then
+		lines[#lines + 1] = GREY .. "Inside " .. entry.dungeon .. "|r"
 	end
 
 	local where = {}

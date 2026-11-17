@@ -7,7 +7,7 @@ local ADDON, ns = ...
 local Journal = {}
 ns.Journal = Journal
 
-local Util, Rares, Respawn, Status, Style, Card = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Style, ns.Card
+local Util, Rares, Respawn, Status, Style, Card, Hunt = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Style, ns.Card, ns.Hunt
 
 local PER_PAGE = 12
 local DROPS_PER_ROW = 8
@@ -19,6 +19,10 @@ local TABS = {
 	{ key = "all", title = "All rares", icon = "Interface\\Icons\\INV_Misc_Book_09", tip = "Every rare the addon knows." },
 	{ key = "zone", title = "This zone", icon = "Interface\\Icons\\INV_Misc_Map_01", tip = "Rares in the zone you are standing in." },
 	{ key = "active", title = "Active", icon = "Interface\\Icons\\INV_Misc_PocketWatch_01", tip = "Up now, recently seen, or with a running timer." },
+	{ key = "wanted", title = "Wanted", icon = "Interface\\Icons\\INV_Misc_Note_02", tip = "Rares you starred, and rares that drop an item you starred. These alert louder and tell you when their spawn window opens." },
+	{ key = "todo", title = "Not killed yet", icon = "Interface\\Icons\\Ability_DualWield", tip = "Rares you have no kill on." },
+	{ key = "dungeon", title = "Dungeon rares", icon = "Interface\\Icons\\INV_Misc_Key_03", tip = "Rares that live inside dungeons. They have no map pin." },
+	{ key = "pets", title = "Beast families", icon = "Interface\\Icons\\Ability_Hunter_BeastTaming", tip = "Rares with a pet family (wolf, cat, ...). Known only for rares you have met: the family is read from the living creature." },
 	{ key = "mine", title = "Seen by you", icon = "Interface\\Icons\\INV_Misc_Eye_01", tip = "Rares this account has met in the world." },
 	{ key = "hidden", title = "Hidden", icon = "Interface\\Icons\\Ability_Vanish", tip = "Rares you hid from the map and lists." },
 }
@@ -194,6 +198,14 @@ function Journal.Collect()
 			pass = ACTIVE[state] == true
 		elseif filter.tab == "mine" then
 			pass = entry.learned == true
+		elseif filter.tab == "wanted" then
+			pass = Hunt.IsWanted(npcID)
+		elseif filter.tab == "todo" then
+			pass = Hunt.Kills(npcID) == 0
+		elseif filter.tab == "dungeon" then
+			pass = entry.dungeon ~= nil
+		elseif filter.tab == "pets" then
+			pass = entry.family ~= nil
 		else
 			pass = true
 		end
@@ -222,6 +234,12 @@ function Journal.Collect()
 					end
 				end
 			end
+			if not hit and entry.dungeon then
+				hit = strfind(strlower(entry.dungeon), query, 1, true) ~= nil
+			end
+			if not hit and entry.family then
+				hit = strfind(strlower(entry.family), query, 1, true) ~= nil
+			end
 			if not hit and #query >= 3 then
 				hit = DropMatches(npcID, query)
 			end
@@ -229,7 +247,7 @@ function Journal.Collect()
 		end
 
 		if pass then
-			list[#list + 1] = { id = npcID, name = name, level = entry.level or 0, state = state, map = mapID, rank = entry.rank }
+			list[#list + 1] = { id = npcID, name = name, level = entry.level or 0, state = state, map = mapID, rank = entry.rank, dungeon = entry.dungeon }
 		end
 	end
 
@@ -347,6 +365,16 @@ local function CreateRow(index)
 	art:SetSize(36 * 64 / 37, 36 * 64 / 37)
 	art:SetPoint("CENTER", 0, -1)
 
+	-- Kill tick and wanted star in the slot's upper corners.
+	row.tick = top:CreateTexture(nil, "OVERLAY")
+	row.tick:SetTexture(Style.TEX.check)
+	row.tick:SetSize(18, 18)
+	row.tick:SetPoint("TOPLEFT", -5, 5)
+	row.star = top:CreateTexture(nil, "OVERLAY")
+	row.star:SetTexture(Style.TEX.star)
+	row.star:SetSize(14, 14)
+	row.star:SetPoint("TOPRIGHT", 4, 4)
+
 	-- State pip in the slot's corner.
 	local pip = CreateFrame("Frame", nil, top)
 	pip:SetSize(12, 12)
@@ -414,9 +442,11 @@ local function RenderList()
 				row.zone:SetText(status)
 				row.zone:SetTextColor(ink[1], ink[2], ink[3])
 			else
-				row.zone:SetText(item.map and Util.MapName(item.map) or "Location unknown")
+				row.zone:SetText(item.map and Util.MapName(item.map) or item.dungeon or "Location unknown")
 				row.zone:SetTextColor(Style.INK_FAINT[1], Style.INK_FAINT[2], Style.INK_FAINT[3])
 			end
+			row.tick:SetShown(Hunt.Kills(item.id) > 0)
+			row.star:SetShown(Hunt.IsWanted(item.id))
 			SetPortraitModel(row.model, item.id)
 			row:Show()
 		else
@@ -437,7 +467,8 @@ local function RenderList()
 		end
 	end
 	listView.empty:SetText(empty or "")
-	listView.count:SetText(#list .. (#list == 1 and " rare" or " rares"))
+	local killed, total = Hunt.Progress()
+	listView.count:SetText(string.format("%d %s  -  killed %d / %d", #list, #list == 1 and "rare" or "rares", killed, total))
 end
 
 -------------------------------------------------------------------------------
@@ -472,6 +503,8 @@ local function RenderDrops()
 		if drop then
 			button.icon:SetTexture(ItemIcon(drop.id))
 			button.count:SetText(drop.seen and ("x" .. drop.seen) or "")
+			button.star:SetShown(Hunt.IsWantedItem(drop.id))
+			button.quest:SetShown(Rares.QuestFromItem(drop.id) ~= nil)
 			local color = drop.quality and drop.quality >= 2 and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[drop.quality]
 			if color then
 				button.glow:SetVertexColor(color.r, color.g, color.b)
@@ -519,17 +552,36 @@ local function RenderDetail()
 	detail.modelBox.rankBar:SetVertexColor(rankColor[1], rankColor[2], rankColor[3])
 	RenderStatus()
 
+	-- Most useful first: the page has room for about seven lines.
 	local lines = {}
-	if entry.sub then
-		lines[#lines + 1] = "<" .. entry.sub .. ">"
+	local kills, firstKill = Hunt.Kills(npcID)
+	if kills > 0 then
+		lines[#lines + 1] = string.format("Killed by you: %d (first %s)", kills, date("%Y-%m-%d", firstKill))
+	else
+		lines[#lines + 1] = "Not killed yet"
 	end
+	lines[#lines + 1] = Status.WindowText(npcID) or "Respawn: not learned yet"
+	local kind = {}
 	if entry.type then
-		lines[#lines + 1] = entry.type
+		kind[#kind + 1] = entry.type
+	end
+	if entry.family then
+		kind[#kind + 1] = entry.family .. " family"
+	end
+	if #kind > 0 then
+		lines[#lines + 1] = table.concat(kind, ", ")
+	end
+	if entry.skin then
+		lines[#lines + 1] = "Corpse: " .. entry.skin
+	end
+	if entry.quests then
+		for _, questID in ipairs(entry.quests) do
+			lines[#lines + 1] = "Starts quest: " .. (Rares.QuestName(questID) or ("#" .. questID))
+		end
 	end
 	if entry.health then
 		lines[#lines + 1] = "Health: " .. (BreakUpLargeNumbers and BreakUpLargeNumbers(entry.health) or entry.health)
 	end
-	lines[#lines + 1] = Status.WindowText(npcID) or "Respawn: not learned yet"
 	local rec = Respawn.GetRecord(npcID)
 	local seen = rec and rec.seen
 	if seen and seen.t then
@@ -539,18 +591,19 @@ local function RenderDetail()
 		end
 		lines[#lines + 1] = line
 	end
-	if rec and (rec.kills or 0) > 0 then
-		lines[#lines + 1] = "Deaths witnessed: " .. rec.kills
+	if entry.sub then
+		lines[#lines + 1] = "<" .. entry.sub .. ">"
 	end
 	if entry.friendly == "A" then
 		lines[#lines + 1] = "Friendly to the Alliance"
 	elseif entry.friendly == "H" then
 		lines[#lines + 1] = "Friendly to the Horde"
 	end
-	if entry.learned then
-		lines[#lines + 1] = "You have met this rare"
+	for i = #lines, 8, -1 do
+		lines[i] = nil
 	end
 	detail.info:SetText(table.concat(lines, "\n"))
+	detail.wanted:SetChecked(Hunt.IsStarred(npcID))
 
 	local zones = {}
 	for mapID, points in pairs(entry.spawns) do
@@ -567,7 +620,7 @@ local function RenderDetail()
 		zoneText[#zoneText + 1] = string.format("%s (%d spawn point%s)", zone.name, zone.count, zone.count == 1 and "" or "s")
 	end
 	detail.zones:SetText(#zoneText > 0 and table.concat(zoneText, ", ")
-		or "Spawn location not known - inside a dungeon, or not met yet.")
+		or (entry.dungeon and ("Inside " .. entry.dungeon .. " - no map pin.") or "Spawn location not known yet."))
 	detail.map:SetEnabled(#zoneText > 0)
 	detail.way:SetEnabled(#zoneText > 0)
 
@@ -732,7 +785,7 @@ end
 local function CreateTab(index, info)
 	local tab = CreateFrame("CheckButton", nil, frame)
 	tab:SetSize(32, 32)
-	tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", -32, -65 - (index - 1) * 49)
+	tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", -32, -65 - (index - 1) * 40)
 	tab.key = info.key
 
 	local back = tab:CreateTexture(nil, "BACKGROUND")
@@ -771,7 +824,7 @@ local function CreateDropButton(index)
 	local column, line = (index - 1) % DROPS_PER_ROW, math.floor((index - 1) / DROPS_PER_ROW)
 	local button = Style.ItemButton(detail, size)
 	button:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT + 2 + column * 38, -298 - line * 36)
-	button:RegisterForClicks("LeftButtonUp")
+	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
 	button.glow = button:CreateTexture(nil, "OVERLAY")
 	button.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
@@ -780,6 +833,15 @@ local function CreateDropButton(index)
 	button.glow:SetSize(size * 1.8, size * 1.8)
 	button.glow:SetPoint("CENTER")
 	button.glow:Hide()
+
+	button.star = button:CreateTexture(nil, "OVERLAY", nil, 2)
+	button.star:SetTexture(Style.TEX.star)
+	button.star:SetSize(14, 14)
+	button.star:SetPoint("TOPRIGHT", 4, 4)
+	button.quest = button:CreateTexture(nil, "OVERLAY", nil, 2)
+	button.quest:SetTexture(Style.TEX.questAvailable)
+	button.quest:SetSize(14, 14)
+	button.quest:SetPoint("TOPLEFT", -3, 3)
 
 	button:SetScript("OnEnter", function(self)
 		local drop = self.drop
@@ -795,14 +857,26 @@ local function CreateDropButton(index)
 		if drop.seen then
 			GameTooltip:AddLine(string.format("You looted this %d time%s.", drop.seen, drop.seen == 1 and "" or "s"), 0.3, 1, 0.4)
 		end
+		local questID = Rares.QuestFromItem(drop.id)
+		if questID then
+			GameTooltip:AddLine("Starts a quest: " .. (Rares.QuestName(questID) or ("#" .. questID)), 1, 0.82, 0)
+		end
+		GameTooltip:AddLine(Hunt.IsWantedItem(drop.id) and "Wanted. Right-click to stop looking for it."
+			or "Right-click: want this drop (every rare that drops it joins the wanted list)", 0.6, 0.6, 0.6, true)
 		GameTooltip:Show()
 	end)
 	button:SetScript("OnLeave", function()
 		GameTooltip:Hide()
 	end)
-	button:SetScript("OnClick", function(self)
+	button:SetScript("OnClick", function(self, mouseButton)
 		local drop = self.drop
 		if not drop then
+			return
+		end
+		if mouseButton == "RightButton" then
+			Hunt.SetWantedItem(drop.id, not Hunt.IsWantedItem(drop.id))
+			Style.Sound("click")
+			RenderDrops()
 			return
 		end
 		local _, link = ItemInfo(drop.id)
@@ -863,6 +937,25 @@ local function CreateDetail()
 		Journal.Select(nil)
 	end)
 	back:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT, -80)
+
+	detail.wanted = Style.Check(detail, "Wanted")
+	Style.Ink(detail.wanted.label)
+	detail.wanted:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT + PAGE_WIDTH - 82, -79)
+	detail.wanted:SetScript("OnClick", function()
+		if selected then
+			Hunt.SetWanted(selected, not Hunt.IsStarred(selected))
+			Style.Sound("click")
+		end
+	end)
+	detail.wanted:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+		GameTooltip:SetText("Wanted")
+		GameTooltip:AddLine("Louder alert when it is found, a notice when its spawn window opens, and a pin on the continent map.", 1, 1, 1, true)
+		GameTooltip:Show()
+	end)
+	detail.wanted:SetScript("OnLeave", function()
+		GameTooltip:Hide()
+	end)
 
 	-- Model in a dark well with a rank-coloured strip along the bottom.
 	local box = Style.Frame("Frame", nil, detail)
@@ -947,28 +1040,49 @@ local function CreateDetail()
 		CreateDropButton(i)
 	end
 
-	detail.map = Style.Button(detail, "Show on Map", 104, 20, function()
+	detail.map = Style.Button(detail, "Show on Map", 96, 20, function()
 		if selected then
 			ShowOnMap(selected)
 		end
 	end)
 	detail.map:SetPoint("TOPLEFT", frame, "TOPLEFT", LEFT, -370)
 
-	detail.way = Style.Button(detail, "Waypoint", 78, 20, function()
+	detail.way = Style.Button(detail, "Waypoint", 72, 20, function()
 		if selected then
 			Status.SetWaypoint(selected)
 		end
 	end)
 	detail.way:SetPoint("LEFT", detail.map, "RIGHT", 4, 0)
 
-	local link = Style.Button(detail, "Link", 56, 20, function()
-		if selected then
-			Status.LinkToChat(selected)
+	local link = Style.Button(detail, "Announce", 76, 20)
+	link:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+	link:SetScript("OnClick", function(_, mouseButton)
+		if not selected then
+			return
 		end
+		if mouseButton == "RightButton" then
+			Status.LinkToChat(selected)
+		else
+			local channel = Hunt.Announce(selected, IsShiftKeyDown() and "general" or nil)
+			if channel then
+				ns.Print("Announced to " .. strlower(channel) .. ".")
+			end
+		end
+	end)
+	link:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_TOP")
+		GameTooltip:SetText("Announce")
+		GameTooltip:AddLine("Click: tell your group, or your guild when not grouped", 1, 1, 1)
+		GameTooltip:AddLine("Shift-click: say it in General", 1, 1, 1)
+		GameTooltip:AddLine("Right-click: put it in the chat box instead", 1, 1, 1)
+		GameTooltip:Show()
+	end)
+	link:SetScript("OnLeave", function()
+		GameTooltip:Hide()
 	end)
 	link:SetPoint("LEFT", detail.way, "RIGHT", 4, 0)
 
-	detail.hide = Style.Button(detail, "Hide", 62, 20, function()
+	detail.hide = Style.Button(detail, "Hide", 56, 20, function()
 		if selected then
 			Rares.SetIgnored(selected, not Rares.IsIgnored(selected))
 		end

@@ -5,6 +5,8 @@
 --   S:<npcID>:<mapID>:<x*10>:<y*10>:<shard>:<rank>:<name>   sighting
 --   D:<npcID>:<shard>:<secondsAgo>                          death
 --   R:<npcID>:<seconds>                                     respawn sample
+--   Q:1                                                     "what do you know?" (guild, at login)
+--   Z:1:<requester>                                         "I am answering <requester>" (others stay quiet)
 local ADDON, ns = ...
 
 local Share = {}
@@ -15,7 +17,9 @@ local Util, Rares, Respawn = ns.Util, ns.Rares, ns.Respawn
 local PREFIX = "BRS1"
 local SEND_GAP = 60 -- seconds between two messages about the same thing
 local SAMPLE_GAP = 600 -- seconds between samples accepted from one sender per rare
-local MAX_AGE = 3600
+local MAX_AGE = 6 * 3600 -- a death older than this says nothing useful
+local SYNC_DEATHS = 15 -- most recent deaths sent in one answer
+local SYNC_GAP = 120 -- seconds between two answers from this client
 
 local lastSent = {}
 local lastSample = {}
@@ -44,9 +48,14 @@ local function Flush()
 	if not message then
 		return
 	end
-	for _, channel in ipairs(Channels()) do
-		-- Sending is refused in some restricted situations; that is fine.
-		pcall(C_ChatInfo.SendAddonMessage, PREFIX, message, channel)
+	if type(message) == "table" then
+		-- Sync traffic: guild only.
+		pcall(C_ChatInfo.SendAddonMessage, PREFIX, message[1], "GUILD")
+	else
+		for _, channel in ipairs(Channels()) do
+			-- Sending is refused in some restricted situations; that is fine.
+			pcall(C_ChatInfo.SendAddonMessage, PREFIX, message, channel)
+		end
 	end
 	if #queue > 0 then
 		sender = C_Timer.NewTimer(1.2, Flush)
@@ -66,6 +75,17 @@ local function Send(key, message)
 	if not sender then
 		-- A short random delay keeps a whole group from answering at once.
 		sender = C_Timer.NewTimer(0.5 + math.random() * 1.5, Flush)
+	end
+end
+
+--- Queues a guild-only sync message (not subject to the per-topic gap).
+local function SendGuild(message)
+	if #queue >= 60 or not (IsInGuild and IsInGuild()) then
+		return
+	end
+	queue[#queue + 1] = { message }
+	if not sender then
+		sender = C_Timer.NewTimer(0.5, Flush)
 	end
 end
 
@@ -155,6 +175,80 @@ function handlers.R(from, npcID, seconds)
 	ns.Fire("RARE_UPDATED", npcID)
 end
 
+-------------------------------------------------------------------------------
+-- Login sync: ask the guild once, one member answers
+-------------------------------------------------------------------------------
+
+local pendingAnswer = {} -- [requester] = timer
+local lastAnswer
+
+local function Answer(requester)
+	pendingAnswer[requester] = nil
+	local now = GetTime()
+	if lastAnswer and now - lastAnswer < SYNC_GAP then
+		return
+	end
+	lastAnswer = now
+	SendGuild("Z:1:" .. requester)
+
+	-- The most recent deaths, newest first, each with what we learned about
+	-- that rare's respawn.
+	local serverNow = GetServerTime()
+	local deaths = {}
+	for npcID, rec in pairs(ns.db.timers) do
+		if Rares.Get(npcID) then
+			for shard, t in pairs(rec.deaths) do
+				local age = serverNow - t
+				if age >= 0 and age < MAX_AGE then
+					deaths[#deaths + 1] = { id = npcID, shard = shard, age = age }
+				end
+			end
+		end
+	end
+	table.sort(deaths, function(a, b)
+		return a.age < b.age
+	end)
+	local sentWindow = {}
+	for i = 1, math.min(#deaths, SYNC_DEATHS) do
+		local death = deaths[i]
+		SendGuild(string.format("D:%d:%s:%d", death.id, death.shard, death.age))
+		if not sentWindow[death.id] then
+			sentWindow[death.id] = true
+			local low, high = Respawn.GetWindow(death.id)
+			if low then
+				SendGuild(string.format("R:%d:%d", death.id, math.floor((low + high) / 2)))
+			end
+		end
+	end
+end
+
+function handlers.Q(from)
+	if not Settings().sync or pendingAnswer[from] then
+		return
+	end
+	-- A random wait: whoever fires first answers, the rest hear the Z and stop.
+	pendingAnswer[from] = C_Timer.NewTimer(2 + math.random() * 6, function()
+		Answer(from)
+	end)
+end
+
+function handlers.Z(_, _, requester)
+	local timer = requester and pendingAnswer[requester]
+	if timer then
+		timer:Cancel()
+		pendingAnswer[requester] = nil
+	end
+end
+
+--- Asks the guild for its timers (once per login, also on /brs sync).
+function Share.RequestSync()
+	if not (IsInGuild and IsInGuild()) then
+		return false
+	end
+	SendGuild("Q:1")
+	return true
+end
+
 function Share.OnMessage(prefix, message, channel, from)
 	if prefix ~= PREFIX or not Settings().receive then
 		return
@@ -182,4 +276,10 @@ ns.Listen("READY", function()
 	end
 	C_ChatInfo.RegisterAddonMessagePrefix(PREFIX)
 	ns.OnEvent("CHAT_MSG_ADDON", Share.OnMessage)
+	-- Guild data is not ready at the very moment of login.
+	C_Timer.After(15, function()
+		if Settings().sync and Settings().receive then
+			Share.RequestSync()
+		end
+	end)
 end)
