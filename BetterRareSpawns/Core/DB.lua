@@ -4,7 +4,7 @@ local ADDON, ns = ...
 local DB = {}
 ns.DB = DB
 
-DB.SCHEMA = 1
+DB.SCHEMA = 2
 
 local defaults = {
 	debug = false,
@@ -24,10 +24,8 @@ local defaults = {
 		duration = 45, -- seconds the alert card stays up
 		cooldown = 300, -- seconds before the same rare alerts again
 		reports = true, -- alert on sightings reported by other players
-		instances = false,
+		instances = true, -- alert inside dungeons and raids
 		mark = false, -- put a raid marker on the rare when targeted
-		windows = true, -- notice when a wanted rare's spawn window opens
-		wanted = true, -- extra sound and screen message for wanted rares
 		windows = true, -- notice when a wanted rare's spawn window opens
 		wanted = true, -- extra sound and screen message for wanted rares
 	},
@@ -87,17 +85,20 @@ function DB.Load()
 		_G.BetterRareSpawnsDB = db
 	end
 
-	db.schema = db.schema or DB.SCHEMA
+	local from = db.schema or DB.SCHEMA
+	db.schema = DB.SCHEMA
 	db.settings = type(db.settings) == "table" and db.settings or {}
+	if from < 2 and type(db.settings.alerts) == "table" then
+		-- Schema 2 turned dungeon and raid alerts on by default. The old "off"
+		-- was the previous default rather than a choice, so it is not kept.
+		db.settings.alerts.instances = nil
+	end
 	ApplyDefaults(db.settings, defaults)
 
 	db.learned = db.learned or {} -- [npcID] = { name, level, rank, type, spawns = { [mapID] = { x, y, x, y, ... } } }
 	db.timers = db.timers or {} -- [npcID] = respawn record, see Respawn.lua
 	db.loot = db.loot or {} -- [npcID] = { [itemID] = timesSeen }
 	db.ignored = db.ignored or {} -- [npcID] = true
-	db.kills = db.kills or {} -- [npcID] = { n, first, last } kills this account got credit for
-	db.wanted = db.wanted or {} -- [npcID] = true
-	db.wantedItems = db.wantedItems or {} -- [itemID] = true
 	db.kills = db.kills or {} -- [npcID] = { n, first, last } kills this account got credit for
 	db.wanted = db.wanted or {} -- [npcID] = true
 	db.wantedItems = db.wantedItems or {} -- [itemID] = true

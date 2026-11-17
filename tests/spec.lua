@@ -559,6 +559,18 @@ T.Fire("PLAYER_REGEN_ENABLED")
 check("card appears after combat", BetterRareSpawnsAlert:IsShown()
 	and BetterRareSpawnsAlert:GetAttribute("macrotext") == "/cleartarget\n/targetexact Old Rare")
 
+check("dungeon and raid alerts are on by default", ns.DB.defaults.alerts.instances == true)
+T.instance = true
+T.units.nameplate4 = { guid = Guid(101, "INST000001"), name = "Elite Rare", level = 25, class = "rareelite" }
+ns.db.timers[101] = nil
+BetterRareSpawnsAlert:Hide()
+T.Advance(400)
+T.Fire("NAME_PLATE_UNIT_ADDED", "nameplate4")
+T.Advance(1)
+check("card appears inside an instance", BetterRareSpawnsAlert:IsShown())
+T.instance = false
+T.units.nameplate4 = nil
+
 T.player.x, T.player.y = nil, nil
 T.Update(1.1)
 T.Update(11)
