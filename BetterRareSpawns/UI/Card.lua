@@ -12,7 +12,7 @@ local ADDON, ns = ...
 local Card = {}
 ns.Card = Card
 
-local Util, Rares, Respawn, Status = ns.Util, ns.Rares, ns.Respawn, ns.Status
+local Util, Rares, Respawn, Status, Style = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Style
 
 local WIDTH = 270
 local PAD = 10
@@ -52,12 +52,13 @@ local function CreateBlock(index)
 
 	-- Progress through the spawn window.
 	block.barBack = block:CreateTexture(nil, "ARTWORK")
-	block.barBack:SetColorTexture(1, 1, 1, 0.12)
-	block.barBack:SetHeight(3)
+	block.barBack:SetColorTexture(0, 0, 0, 0.6)
+	block.barBack:SetHeight(5)
 	block.barBack:SetPoint("TOPLEFT", block.status, "BOTTOMLEFT", 0, -3)
 	block.barBack:SetPoint("RIGHT")
 	block.bar = block:CreateTexture(nil, "OVERLAY")
-	block.bar:SetHeight(3)
+	block.bar:SetHeight(5)
+	block.bar:SetTexture(Style.TEX.statusBar)
 	block.bar:SetPoint("TOPLEFT", block.barBack, "TOPLEFT")
 
 	block.body = block:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -79,13 +80,13 @@ local function EnsureFrame()
 	if frame then
 		return
 	end
-	frame = CreateFrame("Frame", "BetterRareSpawnsCard", UIParent)
+	frame = Style.Frame("Frame", "BetterRareSpawnsCard", UIParent)
 	frame:SetFrameStrata("TOOLTIP")
 	frame:SetWidth(WIDTH)
 	frame:SetClampedToScreen(true)
 	frame:EnableMouse(false) -- the cursor passes straight through
 	frame:Hide()
-	Util.Skin(frame, 0.95)
+	Style.Tooltip(frame)
 
 	frame.hint = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	frame.hint:SetPoint("BOTTOMLEFT", PAD, PAD - 2)
@@ -139,7 +140,7 @@ local function FillBlock(block, item)
 	local levelText = ""
 	if entry then
 		if entry.level then
-			levelText = "Lv " .. entry.level .. " "
+			levelText = "Lv " .. (Rares.LevelText(npcID) or entry.level) .. " "
 		end
 		levelText = levelText .. (RANK_LABEL[entry.rank] or "Rare")
 	end
@@ -157,9 +158,9 @@ local function FillBlock(block, item)
 	block.body:ClearAllPoints()
 	if showBar then
 		block.bar:SetWidth(math.max(1, (WIDTH - PAD * 2) * math.min(1, info.progress)))
-		block.bar:SetColorTexture(r, g, b, 1)
+		block.bar:SetVertexColor(r, g, b)
 		block.body:SetPoint("TOPLEFT", block.barBack, "BOTTOMLEFT", 0, -5)
-		height = height + 11
+		height = height + 13
 	else
 		block.body:SetPoint("TOPLEFT", block.status, "BOTTOMLEFT", 0, -4)
 		height = height + 4
@@ -202,6 +203,11 @@ local function FillBlock(block, item)
 	local loot = LootLine(npcID)
 	if loot then
 		lines[#lines + 1] = GREY .. "Dropped: |r" .. loot
+	else
+		local known = #Rares.Drops(npcID)
+		if known > 0 then
+			lines[#lines + 1] = GREY .. known .. " known drops - Ctrl-click for the journal|r"
+		end
 	end
 	if entry and entry.type then
 		lines[#lines + 1] = GREY .. entry.type .. "|r"
@@ -233,7 +239,7 @@ local function Layout()
 		blocks[i]:Hide()
 	end
 
-	local hint = current.hint or "Click: waypoint   Shift: link   Alt: hide"
+	local hint = current.hint or "Click: waypoint   Ctrl: journal\nShift: link   Alt: hide"
 	if #items > shown then
 		hint = "+" .. (#items - shown) .. " more here - zoom in\n" .. hint
 	end

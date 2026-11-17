@@ -15,16 +15,16 @@ local ADDON, ns = ...
 local MapPins = {}
 ns.MapPins = MapPins
 
-local Util, Rares, Respawn, Status, Card = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card
+local Util, Rares, Respawn, Status, Card, Style = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card, ns.Style
 
-local PIN_SIZE = 20
-local CIRCLE_MASK = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
-local SKULL = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull"
+local PIN_SIZE = 24
+local FOCUS_SECONDS = 20
 
 local overlay, canvas
 local pins, active = {}, 0
 local dirty = true
 local scratchState = {}
+local hoverID, focusID, focusUntil
 
 local function Settings()
 	return ns.db.settings.map
@@ -34,29 +34,18 @@ end
 -- Pin frames
 -------------------------------------------------------------------------------
 
-local function Circle(parent, layer, sublevel, inset)
-	local texture = parent:CreateTexture(nil, layer, nil, sublevel)
-	texture:SetPoint("TOPLEFT", inset, -inset)
-	texture:SetPoint("BOTTOMRIGHT", -inset, inset)
-	texture:SetColorTexture(1, 1, 1, 1)
-	if parent.CreateMaskTexture then
-		local ok, mask = pcall(parent.CreateMaskTexture, parent)
-		if ok and mask then
-			mask:SetTexture(CIRCLE_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-			mask:SetAllPoints(texture)
-			texture:AddMaskTexture(mask)
-		end
+--- Lights up every pin of the hovered rare, and of the rare the journal asked
+-- to point out.
+local function UpdateGlow()
+	if focusID and GetTime() > focusUntil then
+		focusID = nil
 	end
-	return texture
-end
-
-local function HighlightSiblings(npcID, on)
 	for i = 1, active do
 		local pin = pins[i]
 		local match = false
-		if on then
+		if hoverID or focusID then
 			for _, item in ipairs(pin.items) do
-				if item.id == npcID then
+				if item.id == hoverID or item.id == focusID then
 					match = true
 					break
 				end
@@ -68,17 +57,21 @@ end
 
 local function PinOnEnter(self)
 	Card.Show(self, self.items)
-	HighlightSiblings(self.items[1].id, true)
+	hoverID = self.items[1].id
+	UpdateGlow()
 end
 
 local function PinOnLeave(self)
 	Card.Hide(self)
-	HighlightSiblings(nil, false)
+	hoverID = nil
+	UpdateGlow()
 end
 
 local function PinOnClick(self)
 	local item = self.items[1]
-	if IsAltKeyDown() then
+	if IsControlKeyDown and IsControlKeyDown() then
+		ns.Fire("OPEN_JOURNAL", item.id)
+	elseif IsAltKeyDown() then
 		Rares.SetIgnored(item.id, true)
 		ns.Print(Rares.Name(item.id) .. " hidden. Undo with /brs unhide.")
 	elseif IsShiftKeyDown() then
@@ -90,7 +83,7 @@ end
 
 local function CreatePin(index)
 	local pin = CreateFrame("Button", nil, overlay)
-	pin:SetSize(PIN_SIZE, PIN_SIZE)
+	Style.Medallion(pin, PIN_SIZE)
 	pin:RegisterForClicks("LeftButtonUp")
 	pin:SetScript("OnEnter", PinOnEnter)
 	pin:SetScript("OnLeave", PinOnLeave)
@@ -107,19 +100,12 @@ local function CreatePin(index)
 	pin.glow:SetSize(PIN_SIZE * 2.2, PIN_SIZE * 2.2)
 	pin.glow:Hide()
 
-	pin.border = Circle(pin, "BORDER", 0, 0)
-	pin.fill = Circle(pin, "ARTWORK", 0, 2)
-
-	pin.icon = pin:CreateTexture(nil, "OVERLAY")
-	pin.icon:SetTexture(SKULL)
-	pin.icon:SetPoint("CENTER")
-	pin.icon:SetSize(PIN_SIZE * 0.62, PIN_SIZE * 0.62)
-
-	pin.count = pin:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	pin.count = pin:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	pin.count:SetPoint("CENTER", 0, 0)
 	pin.count:SetTextColor(0, 0, 0)
+	pin.count:SetShadowColor(0, 0, 0, 0)
 
-	pin.label = pin:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	pin.label = pin:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 	pin.label:SetPoint("TOP", pin, "BOTTOM", 0, -1)
 
 	-- Slow pulse for rares that are up right now.
@@ -310,11 +296,17 @@ function MapPins.Refresh()
 
 		local color = Status.COLORS[first.state]
 		pin.fill:SetVertexColor(color[1], color[2], color[3])
-		if first.rank == "rareelite" then
-			pin.border:SetVertexColor(1, 0.82, 0.2)
-		else
-			pin.border:SetVertexColor(0, 0, 0)
+		-- Dark skull on the state colour; a gold ring when a rare elite is here,
+		-- silver otherwise (as on the target frame).
+		pin.icon:SetVertexColor(0.1, 0.1, 0.1)
+		local elite = false
+		for _, item in ipairs(cluster.items) do
+			if item.rank == "rareelite" then
+				elite = true
+				break
+			end
 		end
+		Style.MedallionRank(pin, elite and "rareelite" or "rare")
 
 		local many = #cluster.items > 1
 		pin.count:SetText(many and #cluster.items or "")
@@ -330,7 +322,6 @@ function MapPins.Refresh()
 		pin:SetPoint("CENTER", overlay, "TOPLEFT", cluster.cx / scale, -cluster.cy / scale)
 		-- More interesting pins sit on top of less interesting ones.
 		pin:SetFrameLevel(overlay:GetFrameLevel() + 20 - (Respawn.PRIORITY[first.state] or 7))
-		pin.glow:Hide()
 		pin:Show()
 
 		if first.state == "up" then
@@ -353,7 +344,18 @@ function MapPins.Refresh()
 	if hovered then
 		PinOnEnter(hovered)
 	else
+		hoverID = nil
 		Card.Hide()
+		UpdateGlow()
+	end
+end
+
+--- Points a rare out on the map for a while (used by the journal).
+function MapPins.Focus(npcID)
+	focusID, focusUntil = npcID, GetTime() + FOCUS_SECONDS
+	dirty = true
+	if overlay then
+		MapPins.Refresh()
 	end
 end
 
@@ -368,25 +370,19 @@ end
 local function CreateToggle()
 	local parent = WorldMapFrame.ScrollContainer or WorldMapFrame
 	local button = CreateFrame("Button", "BetterRareSpawnsMapToggle", parent)
-	button:SetSize(24, 24)
+	Style.Medallion(button, 31)
 	button:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 8, 8)
 	button:SetFrameLevel(parent:GetFrameLevel() + 50)
-
-	local border = Circle(button, "BORDER", 0, 0)
-	border:SetVertexColor(0, 0, 0)
-	local fill = Circle(button, "ARTWORK", 0, 2)
-	local icon = button:CreateTexture(nil, "OVERLAY")
-	icon:SetTexture(SKULL)
-	icon:SetPoint("CENTER")
-	icon:SetSize(15, 15)
+	button:SetHighlightTexture(Style.TEX.ringHighlight, "ADD")
+	button.icon:SetVertexColor(0.1, 0.1, 0.1)
 
 	local function Update()
 		if Settings().enabled then
-			fill:SetVertexColor(0.3, 0.76, 0.97)
+			button.fill:SetVertexColor(1, 0.82, 0)
 			button:SetAlpha(1)
 		else
-			fill:SetVertexColor(0.4, 0.4, 0.4)
-			button:SetAlpha(0.6)
+			button.fill:SetVertexColor(0.45, 0.45, 0.45)
+			button:SetAlpha(0.7)
 		end
 	end
 
@@ -394,6 +390,8 @@ local function CreateToggle()
 	button:SetScript("OnClick", function(_, mouseButton)
 		if mouseButton == "RightButton" then
 			ns.Fire("OPEN_OPTIONS")
+		elseif IsShiftKeyDown() then
+			ns.Fire("OPEN_JOURNAL")
 		else
 			Settings().enabled = not Settings().enabled
 			ns.Fire("SETTINGS_CHANGED")
@@ -401,8 +399,9 @@ local function CreateToggle()
 	end)
 	button:SetScript("OnEnter", function(self)
 		GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-		GameTooltip:SetText("BetterRareSpawns")
+		GameTooltip:SetText("Rare Spawns")
 		GameTooltip:AddLine("Click: show / hide rare pins", 1, 1, 1)
+		GameTooltip:AddLine("Shift-click: rare journal", 1, 1, 1)
 		GameTooltip:AddLine("Right-click: options", 1, 1, 1)
 		GameTooltip:Show()
 	end)

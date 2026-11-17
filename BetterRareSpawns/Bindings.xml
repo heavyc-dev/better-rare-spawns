@@ -3,4 +3,7 @@
 	<Binding name="BETTERRARESPAWNS_TRACKER" category="ADDONS">
 		BetterRareSpawns_ToggleTracker()
 	</Binding>
+	<Binding name="BETTERRARESPAWNS_JOURNAL" category="ADDONS">
+		BetterRareSpawns_ToggleJournal()
+	</Binding>
 </Bindings>

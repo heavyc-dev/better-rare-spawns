@@ -1,7 +1,7 @@
 # BetterRareSpawns
 
 A rare spawn tracker for World of Warcraft (built and tested against the `wowf` client, Interface 16001).
-No libraries, about 100 KB.
+No libraries, no bundled art, about 150 KB.
 
 ## What it does
 
@@ -15,7 +15,11 @@ No libraries, about 100 KB.
 - **Hover card** next to the pin: instant, never under the cursor, timers count live, and stacked pins
   list every rare in one card.
 - **Minimap dots**, with the tracked rare pinned to the rim when it is out of range.
-- **Rare list** (`/brs`) for the current zone, most promising first.
+- **Rare journal** (`/brs`): a book of every known rare in the game's spellbook frame. Twelve to a page,
+  with tabs (all, this zone, active, seen by you, hidden), search by name, zone, level or drop, and zone /
+  level / sort filters. Each rare has its own page: 3D model, level, health, where it spawns, its timer,
+  and its drops as item buttons with the normal item tooltips.
+- **Zone list** (`/brs list`) for the current zone, most promising first.
 - **Sharing** of sightings, deaths and respawn times with guild and group over hidden addon messages.
 
 ## Controls
@@ -24,7 +28,11 @@ No libraries, about 100 KB.
 | --- | --- | --- |
 | Map pin, list row | Click | Waypoint and track |
 | | Shift-click | Put name, coordinates and status in the chat box |
+| | Ctrl-click | Open that rare's journal page |
 | | Alt-click | Hide that rare (`/brs unhide` to undo) |
+| Journal | Mouse wheel / arrows | Turn the page, or step to the next rare |
+| | Show on Map | Opens the map on its zone and lights up its pins |
+| Map button | Click / shift-click / right-click | Pins on or off / journal / options |
 | Map pin | Right-click | Zooms the map out, as usual |
 | Alert card | Click / right-click | Target the rare / dismiss |
 
@@ -36,8 +44,16 @@ The addon ships no rare database. Rares come from:
 
 1. what you see in the world (always), and
 2. the [QuestieDB](https://github.com/Questie/QuestieDB) addon, if you have it installed. Its rare and
-   rare elite NPCs are read at runtime and cached in your own saved variables. Nothing from it is
-   redistributed here.
+   rare elite NPCs, and the items they drop, are read at runtime and cached in your own saved variables.
+   Nothing from it is redistributed here.
+
+Drops you loot yourself are recorded too, with a count, and are listed first.
+
+## Look
+
+Every window is drawn with the game's own art and frame templates, referenced by path: the spellbook frame
+for the journal, tooltip borders for the hover card, alert and zone list, the dialog box for options, panel
+buttons, check boxes, the minimap button ring for map pins. The addon ships no textures.
 
 ## Development
 

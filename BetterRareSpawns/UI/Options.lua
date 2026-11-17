@@ -1,11 +1,11 @@
--- Options window. Built from plain frames so it does not depend on any
--- particular settings framework of the client.
+-- Options window: the classic dialog box with the game's own check boxes and
+-- panel buttons.
 local ADDON, ns = ...
 
 local Options = {}
 ns.Options = Options
 
-local Util = ns.Util
+local Util, Style = ns.Util, ns.Style
 
 local frame
 
@@ -56,6 +56,9 @@ local LAYOUT = {
 	},
 }
 
+local ROW = 24
+local COLUMN_WIDTH = 270
+
 local widgets = {}
 
 local function Changed()
@@ -63,43 +66,29 @@ local function Changed()
 end
 
 local function CreateCheck(parent, section, key, label)
-	local button = CreateFrame("Button", nil, parent)
-	button:SetSize(250, 20)
-
-	local box = button:CreateTexture(nil, "ARTWORK")
-	box:SetSize(14, 14)
-	box:SetPoint("LEFT", 0, 0)
-	box:SetColorTexture(1, 1, 1, 0.15)
-
-	local tick = button:CreateTexture(nil, "OVERLAY")
-	tick:SetSize(8, 8)
-	tick:SetPoint("CENTER", box, "CENTER")
-	tick:SetColorTexture(0.31, 0.76, 0.97, 1)
-
-	local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	text:SetPoint("LEFT", box, "RIGHT", 6, 0)
-	text:SetText(label)
-
+	local button = Style.Check(parent, label)
 	function button.Update()
-		tick:SetShown(ns.db.settings[section][key] and true or false)
+		button:SetChecked(ns.db.settings[section][key] and true or false)
 	end
 	button:SetScript("OnClick", function()
 		ns.db.settings[section][key] = not ns.db.settings[section][key]
+		Style.Sound("click")
 		Changed()
 	end)
 	return button
 end
 
+--- A value button with its label to the left; click steps forward,
+-- right-click back.
 local function CreateCycle(parent, section, key, label, values, format)
-	local button = CreateFrame("Button", nil, parent)
-	button:SetSize(250, 20)
+	local button = Style.Button(parent, "", 64, 20)
+	button.offsetX = COLUMN_WIDTH - 70
 
-	local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	text:SetPoint("LEFT", 0, 0)
+	local text = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+	text:SetPoint("RIGHT", button, "LEFT", -6, 0)
+	text:SetWidth(COLUMN_WIDTH - 82)
+	text:SetJustifyH("LEFT")
 	text:SetText(label)
-
-	local value = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-	value:SetPoint("RIGHT", 0, 0)
 
 	local function Index()
 		local current = ns.db.settings[section][key]
@@ -112,64 +101,45 @@ local function CreateCycle(parent, section, key, label, values, format)
 	end
 
 	function button.Update()
-		value:SetText("[ " .. string.format(format, ns.db.settings[section][key]) .. " ]")
+		button:SetText(string.format(format, ns.db.settings[section][key]))
 	end
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 	button:SetScript("OnClick", function(_, mouseButton)
 		local step = mouseButton == "RightButton" and -1 or 1
 		local index = (Index() - 1 + step) % #values + 1
 		ns.db.settings[section][key] = values[index]
+		Style.Sound("click")
 		Changed()
 	end)
 	return button
 end
 
-local function CreateAction(parent, label, onClick)
-	local button = CreateFrame("Button", nil, parent)
-	button:SetSize(120, 22)
-	Util.Skin(button, 0.6)
-	local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	text:SetPoint("CENTER")
-	text:SetText(label)
-	button:SetScript("OnClick", onClick)
-	return button
-end
-
 local function Create()
-	frame = CreateFrame("Frame", "BetterRareSpawnsOptions", UIParent)
-	frame:SetSize(580, 470)
+	frame = Style.Frame("Frame", "BetterRareSpawnsOptions", UIParent)
+	frame:SetSize(600, 544)
 	frame:SetPoint("CENTER")
 	frame:SetFrameStrata("DIALOG")
 	frame:Hide() -- new frames start shown
-	Util.Skin(frame, 0.96)
+	Style.Dialog(frame, "Rare Spawns")
 	Util.MakeMovable(frame, "options")
 	if UISpecialFrames then
 		UISpecialFrames[#UISpecialFrames + 1] = "BetterRareSpawnsOptions" -- Escape closes it
 	end
 
-	local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	title:SetPoint("TOPLEFT", 16, -14)
-	title:SetText("BetterRareSpawns |cff9a9a9a" .. ns.VERSION .. "|r")
-
-	local close = CreateFrame("Button", nil, frame)
-	close:SetSize(22, 22)
-	close:SetPoint("TOPRIGHT", -8, -8)
-	close.text = close:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-	close.text:SetPoint("CENTER")
-	close.text:SetText("x")
-	close:SetScript("OnClick", function()
+	local close = Style.Close(frame, function()
 		frame:Hide()
 	end)
+	close:SetPoint("TOPRIGHT", -4, -4)
 
 	-- Two columns, two sections each.
-	local columnX = { 18, 302 }
-	local columnY = { -48, -48 }
+	local columnX = { 24, 310 }
+	local columnY = { -36, -36 }
 	for index, section in ipairs(LAYOUT) do
 		local column = (index % 2 == 1) and 1 or 2
 		local header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 		header:SetPoint("TOPLEFT", columnX[column], columnY[column])
 		header:SetText(section.title)
-		columnY[column] = columnY[column] - 20
+		columnY[column] = columnY[column] - 18
 
 		for _, row in ipairs(section) do
 			local widget
@@ -178,39 +148,44 @@ local function Create()
 			else
 				widget = CreateCheck(frame, row[1], row[2], row[3])
 			end
-			widget:SetPoint("TOPLEFT", columnX[column], columnY[column])
-			columnY[column] = columnY[column] - 21
+			widget:SetPoint("TOPLEFT", columnX[column] + (widget.offsetX or 0), columnY[column])
+			columnY[column] = columnY[column] - ROW
 			widgets[#widgets + 1] = widget
 		end
-		columnY[column] = columnY[column] - 12
+		columnY[column] = columnY[column] - 10
 	end
 
 	frame.info = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	frame.info:SetPoint("BOTTOMLEFT", 18, 44)
-	frame.info:SetPoint("RIGHT", -18, 0)
+	frame.info:SetPoint("BOTTOMLEFT", 24, 50)
+	frame.info:SetPoint("RIGHT", -24, 0)
 	frame.info:SetJustifyH("LEFT")
 
-	local test = CreateAction(frame, "Test alert", function()
-		ns.Alerts.Test()
+	local journal = Style.Button(frame, "Rare Journal", 104, 22, function()
+		ns.Fire("OPEN_JOURNAL")
 	end)
-	test:SetPoint("BOTTOMLEFT", 16, 14)
+	journal:SetPoint("BOTTOMLEFT", 22, 20)
 
-	local list = CreateAction(frame, "Show / hide list", function()
+	local list = Style.Button(frame, "Zone List", 90, 22, function()
 		ns.Tracker.Toggle()
 	end)
-	list:SetPoint("LEFT", test, "RIGHT", 8, 0)
+	list:SetPoint("LEFT", journal, "RIGHT", 6, 0)
 
-	local import = CreateAction(frame, "Re-read QuestieDB", function()
+	local test = Style.Button(frame, "Test Alert", 90, 22, function()
+		ns.Alerts.Test()
+	end)
+	test:SetPoint("LEFT", list, "RIGHT", 6, 0)
+
+	local import = Style.Button(frame, "Re-read QuestieDB", 130, 22, function()
 		if not ns.Rares.ImportQuestie(true) then
 			ns.Print("QuestieDB is not installed (or an import is already running).")
 		end
 	end)
-	import:SetPoint("LEFT", list, "RIGHT", 8, 0)
+	import:SetPoint("LEFT", test, "RIGHT", 6, 0)
 
-	local reset = CreateAction(frame, "Reset settings", function()
+	local reset = Style.Button(frame, "Defaults", 90, 22, function()
 		ns.DB.ResetSettings()
 	end)
-	reset:SetPoint("LEFT", import, "RIGHT", 8, 0)
+	reset:SetPoint("LEFT", import, "RIGHT", 6, 0)
 end
 
 function Options.Refresh()

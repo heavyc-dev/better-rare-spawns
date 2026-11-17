@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: BetterRareSpawns
-## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, and sharing with guild and group.
+## Notes: Rare spawn tracker: alerts, respawn timers, a readable map, a journal of every rare and its drops, and sharing with guild and group.
 ## Author: BetterRareSpawns contributors
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariables: BetterRareSpawnsDB
 ## OptionalDeps: QuestieDB, TomTom
 ## Category: Map
@@ -20,10 +20,12 @@ Core\Status.lua
 Core\Detect.lua
 Core\Share.lua
 Core\Scan.lua
+UI\Style.lua
 UI\Card.lua
 UI\MapPins.lua
 UI\Minimap.lua
 UI\Alerts.lua
 UI\Tracker.lua
+UI\Journal.lua
 UI\Options.lua
 Core\Commands.lua

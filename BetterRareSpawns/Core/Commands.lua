@@ -4,7 +4,8 @@ local ADDON, ns = ...
 local Rares, Respawn, Status = ns.Rares, ns.Respawn, ns.Status
 
 local HELP = {
-	"/brs - show or hide the rare list",
+	"/brs - open the rare journal",
+	"/brs list - show or hide the zone list",
 	"/brs config - options",
 	"/brs test - fire a test alert",
 	"/brs find <name> - waypoint to a rare by name",
@@ -20,6 +21,22 @@ function commands.config()
 	ns.Options.Toggle()
 end
 commands.options = commands.config
+
+function commands.list()
+	ns.Tracker.Toggle()
+end
+
+function commands.journal(rest)
+	local query = strlower(strtrim(rest or ""))
+	if query == "" then
+		ns.Journal.Toggle()
+	else
+		ns.Journal.Toggle(true)
+		ns.Journal.SetSearch(query)
+	end
+end
+commands.j = commands.journal
+commands.book = commands.journal
 
 function commands.test()
 	ns.Alerts.Test()
@@ -97,7 +114,7 @@ SlashCmdList.BETTERRARESPAWNS = function(message)
 	local command, rest = strmatch(strtrim(message or ""), "^(%S*)%s*(.-)$")
 	command = strlower(command or "")
 	if command == "" then
-		ns.Tracker.Toggle()
+		ns.Journal.Toggle()
 	elseif commands[command] then
 		commands[command](rest)
 	else
@@ -109,15 +126,18 @@ end
 function BetterRareSpawns_OnCompartmentClick(_, button)
 	if button == "RightButton" then
 		ns.Options.Toggle()
-	else
+	elseif IsShiftKeyDown() then
 		ns.Tracker.Toggle()
+	else
+		ns.Journal.Toggle()
 	end
 end
 
 function BetterRareSpawns_OnCompartmentEnter(_, menuButton)
 	GameTooltip:SetOwner(menuButton, "ANCHOR_LEFT")
 	GameTooltip:SetText("BetterRareSpawns")
-	GameTooltip:AddLine("Click: rare list", 1, 1, 1)
+	GameTooltip:AddLine("Click: rare journal", 1, 1, 1)
+	GameTooltip:AddLine("Shift-click: zone list", 1, 1, 1)
 	GameTooltip:AddLine("Right-click: options", 1, 1, 1)
 	GameTooltip:Show()
 end
@@ -129,6 +149,6 @@ end
 ns.Listen("READY", function()
 	if not ns.db.welcomed then
 		ns.db.welcomed = true
-		ns.Print("loaded. /brs for the rare list, /brs config for options.")
+		ns.Print("loaded. /brs for the rare journal, /brs list for the zone list, /brs config for options.")
 	end
 end)

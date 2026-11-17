@@ -243,6 +243,13 @@ function IsInGroup() return false end
 function IsInRaid() return false end
 function IsAltKeyDown() return T.alt end
 function IsShiftKeyDown() return T.shift end
+function IsControlKeyDown() return T.ctrl end
+function GetCursorPosition() return 0, 0 end
+T.items = {} -- [itemID] = { name, quality }
+function GetItemInfo(itemID)
+	local item = T.items[itemID]
+	if item then return item[1], "[" .. item[1] .. "]", item[2] end
+end
 function Ambiguate(name) return (name:gsub("%-.*", "")) end
 function PlaySound(kit) T.sound = kit end
 function FlashClientIcon() T.flashed = true end

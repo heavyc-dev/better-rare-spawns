@@ -8,7 +8,7 @@ local ADDON, ns = ...
 local Alerts = {}
 ns.Alerts = Alerts
 
-local Util, Rares, Status = ns.Util, ns.Rares, ns.Status
+local Util, Rares, Status, Style = ns.Util, ns.Rares, ns.Status, ns.Style
 
 local SOURCE_TEXT = {
 	nameplate = "Nameplate",
@@ -35,22 +35,17 @@ end
 -------------------------------------------------------------------------------
 
 local function CreateCard()
-	card = CreateFrame("Button", "BetterRareSpawnsAlert", UIParent, "SecureActionButtonTemplate")
-	card:SetSize(280, 64)
+	card = Style.Frame("Button", "BetterRareSpawnsAlert", UIParent, "SecureActionButtonTemplate")
+	card:SetSize(300, 72)
 	card:SetPoint("TOP", UIParent, "TOP", 0, -140)
 	card:SetFrameStrata("HIGH")
 	card:RegisterForClicks("AnyUp", "AnyDown")
 	card:SetAttribute("type1", "macro")
 	card:Hide()
-	Util.Skin(card, 0.94)
-
-	card.accent = card:CreateTexture(nil, "ARTWORK")
-	card.accent:SetPoint("TOPLEFT", 1, -1)
-	card.accent:SetPoint("BOTTOMLEFT", 1, 1)
-	card.accent:SetWidth(3)
+	Style.Tooltip(card, 0.95)
 
 	card.model = CreateFrame("PlayerModel", nil, card)
-	card.model:SetSize(56, 56)
+	card.model:SetSize(58, 58)
 	card.model:SetPoint("LEFT", 8, 0)
 
 	card.name = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -67,29 +62,19 @@ local function CreateCard()
 
 	card.hint = card:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	card.hint:SetPoint("BOTTOMLEFT", card.model, "BOTTOMRIGHT", 8, 2)
-	card.hint:SetText("Click: target   Right-click: dismiss")
+	card.hint:SetText("Click to target")
 
-	local close = CreateFrame("Button", nil, card)
-	close:SetSize(18, 18)
-	close:SetPoint("TOPRIGHT", -4, -4)
-	close.text = close:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	close.text:SetPoint("CENTER")
-	close.text:SetText("x")
-	close:SetScript("OnClick", function()
+	local close = Style.Close(card, function()
 		Alerts.Dismiss()
-	end)
+	end, 24)
+	close:SetPoint("TOPRIGHT", 0, 0)
 
-	local way = CreateFrame("Button", nil, card)
-	way:SetSize(54, 16)
-	way:SetPoint("BOTTOMRIGHT", -6, 5)
-	way.text = way:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-	way.text:SetPoint("RIGHT")
-	way.text:SetText("|cff4fc3f7Waypoint|r")
-	way:SetScript("OnClick", function()
+	local way = Style.Button(card, "Waypoint", 74, 18, function()
 		if shownID then
 			Status.SetWaypoint(shownID)
 		end
 	end)
+	way:SetPoint("BOTTOMRIGHT", -8, 8)
 
 	card:SetScript("PostClick", function(_, button, down)
 		if button == "RightButton" and not down then
@@ -133,7 +118,7 @@ local function ShowCard(npcID, info)
 		local color = Status.RANK_COLORS[entry and entry.rank or "rare"] or Status.RANK_COLORS.rare
 		card.name:SetText(name)
 		card.name:SetTextColor(color[1], color[2], color[3])
-		card.accent:SetColorTexture(color[1], color[2], color[3], 1)
+		Style.BorderColor(card, color[1], color[2], color[3])
 
 		local parts = { SOURCE_TEXT[info.src] or "Seen" }
 		if info.by then

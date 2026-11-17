@@ -22,7 +22,8 @@ local scratchState = {}
 
 BINDING_HEADER_BETTERRARESPAWNS = "BetterRareSpawns"
 _G["BINDING_NAME_CLICK BetterRareSpawnsScan:LeftButton"] = "Scan for nearby rares"
-BINDING_NAME_BETTERRARESPAWNS_TRACKER = "Show / hide rare list"
+BINDING_NAME_BETTERRARESPAWNS_TRACKER = "Show / hide zone list"
+BINDING_NAME_BETTERRARESPAWNS_JOURNAL = "Show / hide rare journal"
 
 local function Settings()
 	return ns.db.settings.scan

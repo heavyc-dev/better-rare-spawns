@@ -5,12 +5,12 @@ local ADDON, ns = ...
 local Tracker = {}
 ns.Tracker = Tracker
 
-local Util, Rares, Respawn, Status, Card = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card
+local Util, Rares, Respawn, Status, Card, Style = ns.Util, ns.Rares, ns.Respawn, ns.Status, ns.Card, ns.Style
 
 local WIDTH = 250
 local ROW_HEIGHT = 18
 local MAX_ROWS = 14
-local HEADER = 24
+local HEADER = 28
 
 local frame
 local rows = {}
@@ -25,7 +25,9 @@ local function RowOnClick(self)
 	if not item then
 		return
 	end
-	if IsAltKeyDown() then
+	if IsControlKeyDown and IsControlKeyDown() then
+		ns.Fire("OPEN_JOURNAL", item.id)
+	elseif IsAltKeyDown() then
 		Rares.SetIgnored(item.id, true)
 		ns.Print(Rares.Name(item.id) .. " hidden. Undo with /brs unhide.")
 	elseif IsShiftKeyDown() then
@@ -38,19 +40,16 @@ end
 local function CreateRow(index)
 	local row = CreateFrame("Button", nil, frame)
 	row:SetHeight(ROW_HEIGHT)
-	row:SetPoint("TOPLEFT", 6, -HEADER - (index - 1) * ROW_HEIGHT)
-	row:SetPoint("RIGHT", -6, 0)
+	row:SetPoint("TOPLEFT", 8, -HEADER - (index - 1) * ROW_HEIGHT)
+	row:SetPoint("RIGHT", -8, 0)
 	row:RegisterForClicks("LeftButtonUp")
 
-	row.hover = row:CreateTexture(nil, "BACKGROUND")
-	row.hover:SetAllPoints()
-	row.hover:SetColorTexture(1, 1, 1, 0.08)
-	row.hover:Hide()
+	Style.RowHighlight(row)
 
 	row.dot = row:CreateTexture(nil, "ARTWORK")
-	row.dot:SetSize(8, 8)
-	row.dot:SetPoint("LEFT", 2, 0)
-	row.dot:SetColorTexture(1, 1, 1, 1)
+	row.dot:SetSize(14, 14)
+	row.dot:SetPoint("LEFT", 0, 0)
+	row.dot:SetTexture(Style.TEX.skull)
 
 	row.status = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
 	row.status:SetPoint("RIGHT", -2, 0)
@@ -63,13 +62,11 @@ local function CreateRow(index)
 	row.name:SetWordWrap(false)
 
 	row:SetScript("OnEnter", function(self)
-		self.hover:Show()
 		if self.item then
 			Card.Show(self, { self.item })
 		end
 	end)
 	row:SetScript("OnLeave", function(self)
-		self.hover:Hide()
 		Card.Hide(self)
 	end)
 	row:SetScript("OnClick", RowOnClick)
@@ -152,45 +149,53 @@ function Tracker.Refresh()
 	end
 	frame.footer:SetText(footer or "")
 	local extra = footer and (frame.footer:GetStringHeight() + 8) or 0
-	frame:SetHeight(HEADER + shown * ROW_HEIGHT + extra + 6)
+	frame:SetHeight(HEADER + shown * ROW_HEIGHT + extra + 10)
 	frame.footer:ClearAllPoints()
-	frame.footer:SetPoint("BOTTOMLEFT", 8, 6)
+	frame.footer:SetPoint("BOTTOMLEFT", 10, 9)
 end
 
 local function Create()
-	frame = CreateFrame("Frame", "BetterRareSpawnsTracker", UIParent)
+	frame = Style.Frame("Frame", "BetterRareSpawnsTracker", UIParent)
 	frame:SetSize(WIDTH, 100)
 	frame:SetPoint("RIGHT", UIParent, "RIGHT", -60, 60)
 	frame:SetFrameStrata("MEDIUM")
 	frame:Hide() -- new frames start shown
-	Util.Skin(frame, 0.88)
+	Style.Tooltip(frame, 0.9)
 
 	frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-	frame.title:SetPoint("TOPLEFT", 8, -6)
+	frame.title:SetPoint("TOPLEFT", 10, -9)
 
 	frame.footer = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
 	frame.footer:SetJustifyH("LEFT")
 	frame.footer:SetWidth(WIDTH - 16)
 
-	local close = CreateFrame("Button", nil, frame)
-	close:SetSize(18, 18)
-	close:SetPoint("TOPRIGHT", -4, -3)
-	close.text = close:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	close.text:SetPoint("CENTER")
-	close.text:SetText("x")
-	close:SetScript("OnClick", function()
+	local close = Style.Close(frame, function()
 		Tracker.Toggle(false)
-	end)
+	end, 24)
+	close:SetPoint("TOPRIGHT", 0, 0)
 
-	local gear = CreateFrame("Button", nil, frame)
-	gear:SetSize(40, 18)
-	gear:SetPoint("RIGHT", close, "LEFT", -2, 0)
-	gear.text = gear:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-	gear.text:SetPoint("CENTER")
-	gear.text:SetText("options")
-	gear:SetScript("OnClick", function()
-		ns.Fire("OPEN_OPTIONS")
-	end)
+	-- Header shortcuts: small icon buttons.
+	local function HeaderIcon(texture, tip, message, anchor, gap)
+		local button = CreateFrame("Button", nil, frame)
+		button:SetSize(16, 16)
+		button:SetPoint("RIGHT", anchor, "LEFT", gap, 0)
+		button:SetNormalTexture(texture)
+		button:SetHighlightTexture(Style.TEX.squareHighlight, "ADD")
+		button:SetScript("OnClick", function()
+			ns.Fire(message)
+		end)
+		button:SetScript("OnEnter", function(self)
+			GameTooltip:SetOwner(self, "ANCHOR_TOP")
+			GameTooltip:SetText(tip)
+			GameTooltip:Show()
+		end)
+		button:SetScript("OnLeave", function()
+			GameTooltip:Hide()
+		end)
+		return button
+	end
+	local gear = HeaderIcon("Interface\\Icons\\Trade_Engineering", "Options", "OPEN_OPTIONS", close, 0)
+	HeaderIcon("Interface\\Icons\\INV_Misc_Book_09", "Rare journal", "OPEN_JOURNAL", gear, -4)
 
 	Util.MakeMovable(frame, "tracker", function()
 		return Settings().locked

@@ -42,6 +42,10 @@ local function MergeInto(entry, source, origin)
 	entry.level = entry.level or source.level
 	entry.rank = entry.rank or source.rank
 	entry.type = entry.type or source.type
+	entry.minLevel = entry.minLevel or source.minLevel
+	entry.health = entry.health or source.health
+	entry.sub = entry.sub or source.sub
+	entry.friendly = entry.friendly or source.friendly
 	entry[origin] = true
 	if source.spawns then
 		for mapID, points in pairs(source.spawns) do
@@ -157,6 +161,46 @@ function Rares.NearestPoint(npcID, mapID, x, y)
 	return bestX, bestY
 end
 
+--- "23" or "21-23", or nil when the level is not known.
+function Rares.LevelText(npcID)
+	local entry = entries[npcID]
+	if not entry or not entry.level then
+		return nil
+	end
+	if entry.minLevel and entry.minLevel < entry.level then
+		return entry.minLevel .. "-" .. entry.level
+	end
+	return tostring(entry.level)
+end
+
+--- Items this rare can drop: { { id = itemID, seen = timesLootedOrNil }, ... }.
+-- What this account looted comes first, then the imported list.
+function Rares.Drops(npcID)
+	local list, have = {}, {}
+	local own = ns.db.loot[npcID]
+	if own then
+		for itemID, count in pairs(own) do
+			list[#list + 1] = { id = itemID, seen = type(count) == "number" and count or 1 }
+			have[itemID] = true
+		end
+		table.sort(list, function(a, b)
+			if a.seen ~= b.seen then
+				return a.seen > b.seen
+			end
+			return a.id < b.id
+		end)
+	end
+	local imported = ns.db.imported and ns.db.imported.drops and ns.db.imported.drops[npcID]
+	if imported then
+		for _, itemID in ipairs(imported) do
+			if not have[itemID] then
+				list[#list + 1] = { id = itemID }
+			end
+		end
+	end
+	return list
+end
+
 -------------------------------------------------------------------------------
 -- Learning
 -------------------------------------------------------------------------------
@@ -213,10 +257,14 @@ end
 -- QuestieDB import (optional, runtime only)
 -------------------------------------------------------------------------------
 
+local IMPORT_FORMAT = 2 -- bump to make every account re-read after a change here
+local MAX_DROPS = 60 -- per rare
+local MAX_DROPPERS = 40 -- an item dropped by more creatures than this is a world drop, not this rare's loot
+
 local function QuestieKey()
 	local lib = _G.LibQuestieDB
 	local version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata("QuestieDB", "Version")
-	return tostring(version) .. ":" .. tostring(lib and lib.contractVersion)
+	return IMPORT_FORMAT .. "|" .. tostring(version) .. ":" .. tostring(lib and lib.contractVersion)
 end
 
 --- areaId -> uiMapId, from QuestieDB's zone table, with a name match fallback.
@@ -307,6 +355,62 @@ function Rares.ImportQuestie(force)
 	local index, total, found = 1, #ids, 0
 	local BATCH = 300
 
+	local function Finish(drops, withDrops)
+		importing = false
+		db.imported = { key = key, rares = result, count = found, drops = drops }
+		Rebuild()
+		if withDrops > 0 then
+			ns.Print(string.format("Imported %d rares from QuestieDB (drops known for %d).", found, withDrops))
+		else
+			ns.Print(string.format("Imported %d rares from QuestieDB.", found))
+		end
+	end
+
+	-- Second pass: QuestieDB lists droppers per item, so walk the items and
+	-- keep the ones dropped by a rare.
+	local function ImportDrops()
+		local itemDB = _G.ItemDB
+		local drops, withDrops = {}, 0
+		local okIds, itemIds
+		if type(itemDB) == "table" and type(itemDB.GetAllIds) == "function" and type(itemDB.Get) == "function" then
+			okIds, itemIds = pcall(itemDB.GetAllIds)
+		end
+		if not okIds or type(itemIds) ~= "table" then
+			return Finish(drops, 0)
+		end
+
+		local itemIndex, itemTotal = 1, #itemIds
+		local function ItemStep()
+			local stop = math.min(itemIndex + BATCH - 1, itemTotal)
+			for i = itemIndex, stop do
+				local itemID = itemIds[i]
+				local ok, droppers = pcall(itemDB.Get, itemID, "npcDrops")
+				if ok and type(droppers) == "table" and #droppers <= MAX_DROPPERS then
+					for _, npcID in ipairs(droppers) do
+						if result[npcID] then
+							local list = drops[npcID]
+							if not list then
+								list = {}
+								drops[npcID] = list
+								withDrops = withDrops + 1
+							end
+							if #list < MAX_DROPS then
+								list[#list + 1] = itemID
+							end
+						end
+					end
+				end
+			end
+			itemIndex = stop + 1
+			if itemIndex <= itemTotal then
+				C_Timer.After(0, function() ns.SafeCall(ItemStep) end)
+			else
+				Finish(drops, withDrops)
+			end
+		end
+		ItemStep()
+	end
+
 	local function Step()
 		local stop = math.min(index + BATCH - 1, total)
 		for i = index, stop do
@@ -317,9 +421,17 @@ function Rares.ImportQuestie(force)
 				local _, name = pcall(npcDB.Get, npcID, "name")
 				local _, level = pcall(npcDB.Get, npcID, "maxLevel")
 				local _, spawns = pcall(npcDB.Get, npcID, "spawns")
+				local _, minLevel = pcall(npcDB.Get, npcID, "minLevel")
+				local _, health = pcall(npcDB.Get, npcID, "maxLevelHealth")
+				local _, sub = pcall(npcDB.Get, npcID, "subName")
+				local _, friendly = pcall(npcDB.Get, npcID, "friendlyToFaction")
 				local data = {
 					name = type(name) == "string" and name or nil,
 					level = type(level) == "number" and level or nil,
+					minLevel = type(minLevel) == "number" and minLevel or nil,
+					health = (type(health) == "number" and health > 0) and health or nil,
+					sub = (type(sub) == "string" and sub ~= "") and sub or nil,
+					friendly = (type(friendly) == "string" and friendly ~= "") and friendly or nil,
 					rank = rankName,
 					spawns = {},
 				}
@@ -348,12 +460,9 @@ function Rares.ImportQuestie(force)
 
 		index = stop + 1
 		if index <= total then
-			C_Timer.After(0, Step)
+			C_Timer.After(0, function() ns.SafeCall(Step) end)
 		else
-			importing = false
-			db.imported = { key = key, rares = result, count = found }
-			Rebuild()
-			ns.Print(string.format("Imported %d rares from QuestieDB.", found))
+			ImportDrops()
 		end
 	end
 
