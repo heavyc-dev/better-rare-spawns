@@ -28,8 +28,8 @@ No libraries, no bundled art, about 200 KB.
 - **Wanted list**: star a rare, or right-click one of its drops to want that item (every rare dropping it
   becomes wanted). Wanted rares alert louder, stay on the continent map, and raise a notice when their spawn
   window opens, wherever you are.
-- **Camp bar**: stand at a spawn point for a few seconds (or `/brs camp`) and a bar counts down to the spawn
-  window, with a sound when it opens.
+- **Camp bar**: `/brs camp` at a spawn point and a bar counts down to the spawn window, with a sound when it
+  opens. Turn on "Camp bar when waiting at a spawn point" in the options to have it appear by itself.
 - **Announce**: one click on the alert or the journal page tells your group or guild; shift-click says it in
   General. Only ever on your click.
 - **Guild sync**: at login the addon asks the guild for its recent deaths and learned respawn times; one
