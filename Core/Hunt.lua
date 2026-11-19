@@ -110,6 +110,14 @@ local function WantedChanged()
 	ns.Fire("RARE_UPDATED")
 end
 
+--- Call when a rare dropped an item it was not known to drop: it may now
+-- drop a wanted item.
+function Hunt.LootLearned(itemID)
+	if ns.db.wantedItems[itemID] then
+		WantedChanged()
+	end
+end
+
 --- True when the rare is starred, or drops a starred item.
 function Hunt.IsWanted(npcID)
 	return ns.db.wanted[npcID] == true or ViaItem()[npcID] == true
@@ -194,10 +202,26 @@ local function Check(npcID)
 	end
 end
 
+-- A state remembered on another layer, or before the watch was paused, says
+-- nothing about a transition now: start over.
+ns.Listen("SHARD_CHANGED", function()
+	wipe(lastState)
+end)
+
+ns.Listen("WANTED_CHANGED", function()
+	for npcID in pairs(lastState) do
+		if not extraWatch[npcID] and not Hunt.IsWanted(npcID) then
+			lastState[npcID] = nil
+		end
+	end
+end)
+
 function Hunt.Tick()
 	if not ns.db.settings.alerts.windows then
+		wipe(lastState)
 		return
 	end
+
 	Hunt.EachWanted(Check)
 	for npcID in pairs(extraWatch) do
 		if not Hunt.IsWanted(npcID) then

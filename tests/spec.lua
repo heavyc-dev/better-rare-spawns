@@ -195,6 +195,34 @@ ns.Share.OnMessage("BRS1", "S:779:1433:300:300:x:rare:Off", "GUILD", "Friend-Rea
 check("receive switch respected", ns.Rares.Get(779) == nil)
 ns.db.settings.share.receive = true
 
+ns.Share.OnMessage("BRS1", "S:1e999:1433:300:300:?:rare:Inf", "GUILD", "Friend-Realm")
+ns.Share.OnMessage("BRS1", "S:780.5:1433:300:300:?:rare:Frac", "GUILD", "Friend-Realm")
+check("non-integer npc ids rejected", ns.Rares.Get(math.huge) == nil and ns.Rares.Get(780.5) == nil and ns.db.timers[math.huge] == nil)
+ns.Share.OnMessage("BRS1", "S:781:1433:300:300:?:rare:Whispered", "WHISPER", "Stranger-Realm")
+check("whispers ignored", ns.Rares.Get(781) == nil)
+ns.Share.OnMessage("BRS1", "S:782:1433:300:300:?:rare:|TInterface\\Big:9999|t", "GUILD", "Friend-Realm")
+check("names with UI escapes rejected", ns.Rares.Get(782) == nil)
+ns.Share.OnMessage("BRS1", "D:777:junk-shard:10", "GUILD", "Friend-Realm")
+check("malformed shard rejected", R.GetRecord(777).deaths["junk-shard"] == nil)
+ns.db.settings.detect.learn = false
+ns.Share.OnMessage("BRS1", "S:783:1433:300:300:?:rare:NoLearn", "GUILD", "Friend-Realm")
+check("learn switch covers shared rares", ns.Rares.Get(783) == nil)
+ns.db.settings.detect.learn = true
+ns.Share.OnMessage("BRS1", "W:777:1200:1800", "GUILD", "Friend-Realm")
+check("shared window used while nothing is measured", select(3, R.GetWindow(777)) == 0
+	and ns.Status.WindowText(777):find("from guild"))
+R.AddSample(777, 1500)
+check("own sample replaces a shared window", select(3, R.GetWindow(777)) == 1)
+-- A share about the living rare that arrives just after its death is stale.
+T.Advance(60)
+ns.Share.OnMessage("BRS1", "D:777:4444-0-77:0", "GUILD", "Friend-Realm")
+ns.Share.OnMessage("BRS1", "S:777:1433:300:300:4444-0-77:rareelite:Shared Rare", "GUILD", "Ally-Realm")
+check("late sighting does not undo a fresh death", R.GetState(777, "4444-0-77").state ~= "up", R.GetState(777, "4444-0-77").state)
+-- A sighting on another layer leaves this layer's timer alone.
+T.Advance(60)
+ns.Share.OnMessage("BRS1", "S:777:1433:300:300:4444-0-88:rareelite:Shared Rare", "GUILD", "Ally-Realm")
+check("other layer sighting keeps this layer's timer", R.GetState(777, "4444-0-77").state ~= "up", R.GetState(777, "4444-0-77").state)
+
 -------------------------------------------------------------------------------
 section("scan key")
 T.player.x, T.player.y = 0.40, 0.40
@@ -546,7 +574,7 @@ for _, message in ipairs(T.sent) do
 	if message[3] == "GUILD" then
 		if message[2] == "Z:1:Newcomer" then sawZ = true end
 		if message[2]:find("^D:101:") then sawD = true end
-		if message[2]:find("^R:101:") then sawR = true end
+		if message[2]:find("^W:101:%d+:%d+$") then sawR = true end
 	end
 end
 check("a request is answered with recent deaths and windows", sawZ and sawD and sawR, #T.sent)

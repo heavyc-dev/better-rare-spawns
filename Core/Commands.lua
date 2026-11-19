@@ -140,12 +140,16 @@ function commands.want(rest)
 end
 
 function commands.sync()
-	if ns.Share.RequestSync() then
+	local sent, why = ns.Share.RequestSync()
+	if sent then
 		ns.Print("Asked the guild for its timers.")
+	elseif why == "receive" then
+		ns.Print("Receiving shared data is turned off, so a sync would bring nothing in.")
 	else
 		ns.Print("You are not in a guild.")
 	end
 end
+
 
 function commands.kills()
 	local killed, total = ns.Hunt.Progress()

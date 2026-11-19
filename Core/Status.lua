@@ -63,12 +63,14 @@ function Status.WindowText(npcID)
 		return nil
 	end
 	local range = low == high and Util.Duration(low) or (Util.Duration(low) .. " - " .. Util.Duration(high))
+	if count == 0 then
+		return string.format("Respawn %s (from guild)", range)
+	end
 	return string.format("Respawn %s (%d sample%s)", range, count, count == 1 and "" or "s")
 end
 
---- Where to send the player for this rare: mapID, x, y.
--- Prefers a fresh sighting, else the spawn point nearest to the player.
 --- Where to draw a rare that is up on `mapID`: x, y, or nil when it has no
+
 -- live sighting there. A position reported by someone else is used as it is.
 -- The player's own sighting records where the player stood, which would put
 -- the pin under their own arrow, so it snaps to the nearest spawn point.

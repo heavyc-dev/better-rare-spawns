@@ -4,7 +4,8 @@
 -- Wire format, ":" separated:
 --   S:<npcID>:<mapID>:<x*10>:<y*10>:<shard>:<rank>:<name>   sighting
 --   D:<npcID>:<shard>:<secondsAgo>                          death
---   R:<npcID>:<seconds>                                     respawn sample
+--   R:<npcID>:<seconds>                                     respawn sample (measured)
+--   W:<npcID>:<low>:<high>                                  learned window (sync answers only)
 --   Q:1                                                     "what do you know?" (guild, at login)
 --   Z:1:<requester>                                         "I am answering <requester>" (others stay quiet)
 local ADDON, ns = ...
@@ -20,10 +21,22 @@ local SAMPLE_GAP = 600 -- seconds between samples accepted from one sender per r
 local MAX_AGE = 6 * 3600 -- a death older than this says nothing useful
 local SYNC_DEATHS = 15 -- most recent deaths sent in one answer
 local SYNC_GAP = 120 -- seconds between two answers from this client
+local LIVE_QUEUE = 10 -- live messages waiting at most
+local SYNC_QUEUE = 60 -- sync messages waiting at most
+local SENDER_BURST = 40 -- messages accepted from one sender per SENDER_WINDOW
+local SENDER_WINDOW = 60
+local LEARN_PER_SENDER = 5 -- unknown rares one sender may teach us per session
+local MAX_ID = 2 ^ 31
+
+-- Where a message may come from, and the setting that has to allow it.
+local CHANNEL_SETTING = { GUILD = "guild", PARTY = "group", RAID = "group", INSTANCE_CHAT = "group" }
 
 local lastSent = {}
 local lastSample = {}
-local queue = {}
+local liveQueue = {}
+local syncQueue = {}
+local budget = {} -- [sender] = { windowStart, count }
+local taught = {} -- [sender] = unknown rares learned from them this session
 local sender
 
 local function Settings()
@@ -37,27 +50,36 @@ local function Channels()
 		list[#list + 1] = "GUILD"
 	end
 	if settings.group and IsInGroup and IsInGroup() then
-		list[#list + 1] = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
+		local home = not LE_PARTY_CATEGORY_HOME or IsInGroup(LE_PARTY_CATEGORY_HOME)
+		if home then
+			list[#list + 1] = (IsInRaid and IsInRaid()) and "RAID" or "PARTY"
+		elseif LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+			-- Dungeon finder / LFR group with no home group.
+			list[#list + 1] = "INSTANCE_CHAT"
+		end
 	end
 	return list
 end
 
+-- Live sightings and deaths go out before sync traffic, so a long sync
+-- answer never delays or crowds out news.
 local function Flush()
 	sender = nil
-	local message = table.remove(queue, 1)
-	if not message then
-		return
-	end
-	if type(message) == "table" then
-		-- Sync traffic: guild only.
-		pcall(C_ChatInfo.SendAddonMessage, PREFIX, message[1], "GUILD")
-	else
+	local message = table.remove(liveQueue, 1)
+	if message then
 		for _, channel in ipairs(Channels()) do
 			-- Sending is refused in some restricted situations; that is fine.
 			pcall(C_ChatInfo.SendAddonMessage, PREFIX, message, channel)
 		end
+	else
+		message = table.remove(syncQueue, 1)
+		if not message then
+			return
+		end
+		-- Sync traffic: guild only.
+		pcall(C_ChatInfo.SendAddonMessage, PREFIX, message, "GUILD")
 	end
-	if #queue > 0 then
+	if #liveQueue + #syncQueue > 0 then
 		sender = C_Timer.NewTimer(1.2, Flush)
 	end
 end
@@ -67,11 +89,11 @@ local function Send(key, message)
 	if lastSent[key] and now - lastSent[key] < SEND_GAP then
 		return
 	end
-	if #Channels() == 0 or #queue >= 10 or #message > 240 then
+	if #Channels() == 0 or #liveQueue >= LIVE_QUEUE or #message > 240 then
 		return
 	end
 	lastSent[key] = now
-	queue[#queue + 1] = message
+	liveQueue[#liveQueue + 1] = message
 	if not sender then
 		-- A short random delay keeps a whole group from answering at once.
 		sender = C_Timer.NewTimer(0.5 + math.random() * 1.5, Flush)
@@ -80,10 +102,10 @@ end
 
 --- Queues a guild-only sync message (not subject to the per-topic gap).
 local function SendGuild(message)
-	if #queue >= 60 or not (IsInGuild and IsInGuild()) then
+	if #syncQueue >= SYNC_QUEUE or not (IsInGuild and IsInGuild()) then
 		return
 	end
-	queue[#queue + 1] = { message }
+	syncQueue[#syncQueue + 1] = message
 	if not sender then
 		sender = C_Timer.NewTimer(0.5, Flush)
 	end
@@ -120,9 +142,33 @@ end)
 
 local handlers = {}
 
+--- A whole non-negative number below `max`, or nil. tonumber alone would
+-- also accept "1e999" (inf), "0x10" and fractions.
+local function Int(value, max)
+	if type(value) ~= "string" or #value > 10 or not strfind(value, "^%d+$") then
+		return nil
+	end
+	value = tonumber(value)
+	if not value or value >= (max or MAX_ID) then
+		return nil
+	end
+	return value
+end
+
+--- A shard as Util.ParseGUID builds it ("server-instance-zone"), or "?".
+local function Shard(value)
+	if value == "?" then
+		return value
+	end
+	if type(value) == "string" and #value <= 32 and strfind(value, "^%d+%-%d+%-%d+$") then
+		return value
+	end
+	return nil
+end
+
 function handlers.S(from, npcID, mapID, x, y, shard, rank, name)
-	mapID, x, y = tonumber(mapID), tonumber(x), tonumber(y)
-	if not mapID or not x or not y or x < 0 or x > 1000 or y < 0 or y > 1000 then
+	mapID, x, y, shard = Int(mapID), Int(x), Int(y), Shard(shard)
+	if not mapID or not x or not y or not shard or x > 1000 or y > 1000 then
 		return
 	end
 	if not C_Map.GetMapInfo(mapID) then
@@ -133,10 +179,17 @@ function handlers.S(from, npcID, mapID, x, y, shard, rank, name)
 		rank = "rare"
 	end
 	if not Rares.Get(npcID) then
-		if not name or name == "" or #name > 60 then
+		-- Learning from others obeys the same switch as learning on sight, and
+		-- one sender can only teach a handful of new rares per session.
+		if not ns.db.settings.detect.learn or (taught[from] or 0) >= LEARN_PER_SENDER then
 			return
 		end
-		Rares.Learn(npcID, { name = name, rank = rank, map = mapID, x = x, y = y })
+		-- "|" starts a UI escape (textures, colours, links): never from a peer.
+		if not name or name == "" or #name > 60 or strfind(name, "|", 1, true) then
+			return
+		end
+		taught[from] = (taught[from] or 0) + 1
+		Rares.Learn(npcID, { name = name, rank = rank, map = mapID, x = x, y = y, remote = true })
 	end
 	if Rares.IsIgnored(npcID) then
 		return
@@ -149,8 +202,8 @@ function handlers.S(from, npcID, mapID, x, y, shard, rank, name)
 end
 
 function handlers.D(_, npcID, shard, age)
-	age = tonumber(age)
-	if not age or age < 0 or age > MAX_AGE or not Rares.Get(npcID) then
+	age, shard = Int(age), Shard(shard)
+	if not age or not shard or age > MAX_AGE or not Rares.Get(npcID) then
 		return
 	end
 	local t = GetServerTime() - age
@@ -160,7 +213,7 @@ function handlers.D(_, npcID, shard, age)
 end
 
 function handlers.R(from, npcID, seconds)
-	seconds = tonumber(seconds)
+	seconds = Int(seconds)
 	if not seconds or not Rares.Get(npcID) then
 		return
 	end
@@ -173,6 +226,19 @@ function handlers.R(from, npcID, seconds)
 	lastSample[key] = now
 	Respawn.AddSample(npcID, seconds)
 	ns.Fire("RARE_UPDATED", npcID)
+end
+
+-- A window someone else learned. It is kept apart from measured samples and
+-- only used while this client has measured nothing itself, so guild echoes
+-- never wash out real data.
+function handlers.W(_, npcID, low, high)
+	low, high = Int(low), Int(high)
+	if not low or not high or low > high or not Rares.Get(npcID) then
+		return
+	end
+	if Respawn.SetSharedWindow(npcID, low, high) then
+		ns.Fire("RARE_UPDATED", npcID)
+	end
 end
 
 -------------------------------------------------------------------------------
@@ -214,9 +280,11 @@ local function Answer(requester)
 		SendGuild(string.format("D:%d:%s:%d", death.id, death.shard, death.age))
 		if not sentWindow[death.id] then
 			sentWindow[death.id] = true
-			local low, high = Respawn.GetWindow(death.id)
-			if low then
-				SendGuild(string.format("R:%d:%d", death.id, math.floor((low + high) / 2)))
+			-- Only windows measured here: re-sending one heard from the guild
+			-- would just echo it back.
+			local low, high, count = Respawn.GetWindow(death.id)
+			if low and count and count > 0 then
+				SendGuild(string.format("W:%d:%d:%d", death.id, low, high))
 			end
 		end
 	end
@@ -241,9 +309,13 @@ function handlers.Z(_, _, requester)
 end
 
 --- Asks the guild for its timers (once per login, also on /brs sync).
+-- Returns true when sent, or false plus why not ("receive" or "guild").
 function Share.RequestSync()
+	if not Settings().receive then
+		return false, "receive"
+	end
 	if not (IsInGuild and IsInGuild()) then
-		return false
+		return false, "guild"
 	end
 	SendGuild("Q:1")
 	return true
@@ -257,18 +329,41 @@ function Share.OnMessage(prefix, message, channel, from)
 	if type(message) ~= "string" or type(from) ~= "string" then
 		return
 	end
+	-- Only the channels sharing is about, each behind its own switch: a
+	-- whisper must not be able to plant rares or trigger guild traffic.
+	local setting = CHANNEL_SETTING[channel]
+	if not setting or not Settings()[setting] then
+		return
+	end
 	from = Ambiguate and Ambiguate(from, "short") or from
 	if from == UnitName("player") then
 		return
 	end
 
 	local kind, npcID, a, b, c, d, e, f = strsplit(":", message)
-	npcID = tonumber(npcID)
 	local handler = handlers[kind]
-	if handler and npcID and npcID > 0 then
-		handler(from, npcID, a, b, c, d, e, f)
+	npcID = Int(npcID)
+	if not handler or not npcID or npcID == 0 then
+		return
 	end
+	-- Sync requests and answers belong to the guild.
+	if (kind == "Q" or kind == "Z") and channel ~= "GUILD" then
+		return
+	end
+	-- Per-sender budget, wide enough for one full sync answer.
+	local now = GetTime()
+	local spent = budget[from]
+	if not spent or now - spent[1] >= SENDER_WINDOW then
+		spent = { now, 0 }
+		budget[from] = spent
+	end
+	spent[2] = spent[2] + 1
+	if spent[2] > SENDER_BURST then
+		return
+	end
+	handler(from, npcID, a, b, c, d, e, f)
 end
+
 
 ns.Listen("READY", function()
 	if not C_ChatInfo or not C_ChatInfo.RegisterAddonMessagePrefix then
