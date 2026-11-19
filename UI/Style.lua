@@ -208,10 +208,16 @@ function Style.Check(parent, label)
 			tick:SetShown(checked and true or false)
 		end
 	end
-	-- Let a click on the label count too.
+	-- Let a click on the label count too, but no further than the label: a
+	-- wider area would cover whatever sits beside it.
 	if button.SetHitRectInsets then
-		button:SetHitRectInsets(0, -180, 0, 0)
+		local width = button.label.GetStringWidth and button.label:GetStringWidth()
+		if type(width) ~= "number" or width <= 0 then
+			width = 180
+		end
+		button:SetHitRectInsets(0, -(width + 4), 0, 0)
 	end
+
 	return button
 end
 

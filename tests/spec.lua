@@ -779,6 +779,10 @@ local seenBefore = #seen
 T.Fire("CHAT_MSG_MONSTER_YELL", "Avenge me!", "Distant Rare", nil, nil, nil, nil, nil, nil, nil, nil, nil, yellGUID)
 check("death yell does not bring the rare back", #seen == seenBefore and ns.Respawn.GetState(5600, "4444-0-77").state ~= "up")
 
+ns.Tracker.Toggle(true)
+ns.DB.ResetSettings()
+check("restoring defaults hides the tracker", not BetterRareSpawnsTracker:IsShown() and ns.db.settings.tracker.shown == false)
+
 -------------------------------------------------------------------------------
 check("no Lua errors anywhere", #T.errors == 0, table.concat(T.errors, "\n"))
 print(string.format("%d passed, %d failed", passed, failed))

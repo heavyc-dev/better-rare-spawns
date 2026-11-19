@@ -63,6 +63,10 @@ local scratch = {}
 -------------------------------------------------------------------------------
 
 local itemNames = {}
+-- Items whose name was not cached when looked up. Each lookup of an uncached
+-- item asks the server, so the drop search asks once and waits for
+-- GET_ITEM_INFO_RECEIVED.
+local asked = {}
 
 local function ItemInfo(itemID)
 	local getInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
@@ -72,6 +76,9 @@ local function ItemInfo(itemID)
 	local name, link, quality = getInfo(itemID) -- cached data only
 	if name then
 		itemNames[itemID] = strlower(name)
+		asked[itemID] = nil
+	else
+		asked[itemID] = true
 	end
 	return name, link, quality
 end
@@ -98,7 +105,7 @@ local function DropMatches(npcID, query)
 	if imported then
 		for _, itemID in ipairs(imported) do
 			local name = itemNames[itemID]
-			if name == nil then
+			if name == nil and not asked[itemID] then
 				ItemInfo(itemID)
 				name = itemNames[itemID]
 			end
@@ -424,7 +431,17 @@ local function RenderList()
 	for i = 1, PER_PAGE do
 		local row = rows[i] or CreateRow(i)
 		local item = list[first + i]
+		local before = row.item
 		row.item = item
+		-- Paging or a rebuild changed the row under a resting cursor.
+		if Card.IsShownFor(row) and (not item or not before or before.id ~= item.id) then
+			if item then
+				Card.Show(row, { item }, "Click: open page   Shift: link")
+			else
+				Card.Hide(row)
+			end
+		end
+
 		if item then
 			row.name:SetText(item.name)
 			local ink = Style.INK_STATE[item.state]
@@ -1141,8 +1158,16 @@ local function Create()
 	if type(search.Instructions) == "table" then
 		search.Instructions:SetText("Name, zone, level or drop")
 	end
+	-- Typing rebuilds the list once the keys pause, not on every key.
+	local searchTimer
 	search:HookScript("OnTextChanged", function(self)
-		Journal.SetSearch(self:GetText() or "")
+		if searchTimer then
+			searchTimer:Cancel()
+		end
+		searchTimer = C_Timer.NewTimer(0.25, function()
+			searchTimer = nil
+			Journal.SetSearch(self:GetText() or "")
+		end)
 	end)
 	search:HookScript("OnEscapePressed", function(self)
 		self:ClearFocus()
@@ -1256,7 +1281,15 @@ end)
 
 -- Item names and qualities arrive late: re-sort the open drop list once.
 local itemTimer
-ns.OnEvent("GET_ITEM_INFO_RECEIVED", function()
+ns.OnEvent("GET_ITEM_INFO_RECEIVED", function(itemID)
+	if itemID and asked[itemID] then
+		ItemInfo(itemID)
+		-- A drop search may match this name now; the list rebuilds at most
+		-- once a second.
+		if itemNames[itemID] and #(filter.search or "") >= 3 then
+			stale = true
+		end
+	end
 	if itemTimer or not selected or not Journal.IsShown() then
 		return
 	end

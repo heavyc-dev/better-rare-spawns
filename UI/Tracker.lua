@@ -124,7 +124,13 @@ function Tracker.Refresh()
 	for i = 1, shown do
 		local row = rows[i] or CreateRow(i)
 		local item = items[i]
+		local before = row.item
 		row.item = item
+		-- The list re-sorts under a resting cursor: keep the card on the row's
+		-- new rare.
+		if Card.IsShownFor(row) and (not before or before.id ~= item.id) then
+			Card.Show(row, { item })
+		end
 
 		local text, r, g, b = Status.Describe(item.id, true)
 		row.dot:SetVertexColor(r, g, b)
@@ -138,6 +144,7 @@ function Tracker.Refresh()
 	end
 	for i = shown + 1, #rows do
 		rows[i].item = nil
+		Card.Hide(rows[i])
 		rows[i]:Hide()
 	end
 
@@ -240,6 +247,11 @@ ns.Listen("RARE_UPDATED", Tracker.Refresh)
 ns.Listen("SETTINGS_CHANGED", function()
 	if frame then
 		frame:SetScale(Settings().scale)
+		-- "Defaults" in the options can hide it.
+		if frame:IsShown() ~= Settings().shown then
+			frame:SetShown(Settings().shown)
+		end
 	end
 	Tracker.Refresh()
 end)
+

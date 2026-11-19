@@ -188,7 +188,13 @@ ns.Listen("READY", function()
 	end)
 end)
 
-ns.Listen("SETTINGS_CHANGED", MinimapButton.Refresh)
+ns.Listen("SETTINGS_CHANGED", function()
+	MinimapButton.Refresh()
+	-- "Defaults" in the options also resets where the button sits.
+	if button then
+		Place()
+	end
+end)
 
 -- Sightings and sync answers come in bursts: one refresh per burst.
 local refreshPending = false
