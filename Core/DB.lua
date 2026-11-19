@@ -4,7 +4,7 @@ local ADDON, ns = ...
 local DB = {}
 ns.DB = DB
 
-DB.SCHEMA = 2
+DB.SCHEMA = 3
 
 local defaults = {
 	debug = false,
@@ -46,7 +46,7 @@ local defaults = {
 		angle = 205, -- degrees around the minimap
 	},
 	camp = {
-		enabled = true, -- show the camp bar when waiting at a spawn point
+		enabled = false, -- show the camp bar by itself when waiting at a spawn point
 	},
 	share = {
 		guild = true,
@@ -94,6 +94,11 @@ function DB.Load()
 		-- Schema 2 turned dungeon and raid alerts on by default. The old "off"
 		-- was the previous default rather than a choice, so it is not kept.
 		db.settings.alerts.instances = nil
+	end
+	if from < 3 and type(db.settings.camp) == "table" then
+		-- Schema 3 turned the automatic camp bar off by default. The old "on"
+		-- was the previous default rather than a choice, so it is not kept.
+		db.settings.camp.enabled = nil
 	end
 	ApplyDefaults(db.settings, defaults)
 

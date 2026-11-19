@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The camp bar no longer pops up by itself at spawn points. Turn it back on in the options, or open it any time
+  with `/brs camp`.
+
 ## 1.1.0
 
 Fixes from a full review of the addon.

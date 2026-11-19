@@ -25,6 +25,14 @@ T.Fire("ADDON_LOADED", "BetterRareSpawns")
 T.Fire("PLAYER_LOGIN")
 check("saved variables created", type(BetterRareSpawnsDB) == "table" and ns.db == BetterRareSpawnsDB)
 check("defaults applied", ns.db.settings.alerts.cooldown == 300)
+do -- older saved variables: the camp bar's old default is not kept
+	local current = BetterRareSpawnsDB
+	BetterRareSpawnsDB = { schema = 2, settings = { camp = { enabled = true }, scan = { range = 90 } } }
+	ns.DB.Load()
+	check("schema 3 turns the automatic camp bar off", ns.db.settings.camp.enabled == false and ns.db.settings.scan.range == 90)
+	BetterRareSpawnsDB = current
+	ns.db = current
+end
 check("slash command registered", type(SlashCmdList.BETTERRARESPAWNS) == "function")
 T.addons = { RareScanner = true }
 ns.Welcome.Show(false)
@@ -617,6 +625,8 @@ Journal.Toggle(false)
 -------------------------------------------------------------------------------
 section("camp bar")
 local Camp = ns.Camp
+check("automatic camp bar is off by default", ns.db.settings.camp.enabled == false)
+ns.db.settings.camp.enabled = true
 Camp.Stop(false) -- earlier sections stood on spawn points long enough to raise it
 local campChat = #T.chat
 T.Advance(700) -- let earlier notices expire
@@ -668,7 +678,6 @@ check("automatic bar can be turned off", Camp.Current() == nil)
 SlashCmdList.BETTERRARESPAWNS("camp")
 check("/brs camp still works by hand", Camp.Current() == 101)
 SlashCmdList.BETTERRARESPAWNS("camp")
-ns.db.settings.camp.enabled = true
 T.player.map, T.player.x, T.player.y = 1429, 0.5, 0.5
 
 -------------------------------------------------------------------------------
