@@ -123,8 +123,16 @@ local function Create()
 end
 
 function MinimapButton.Refresh()
+	local showButton = Minimap and Settings().button
+	if not showButton and not broker then
+		-- Nothing shows the summary: skip the scan.
+		if button then
+			button:Hide()
+		end
+		return 0, 0
+	end
 	local up, open = Hunt.Summary()
-	if Minimap and Settings().button then
+	if showButton then
 		if not button then
 			Create()
 		end
@@ -181,4 +189,17 @@ ns.Listen("READY", function()
 end)
 
 ns.Listen("SETTINGS_CHANGED", MinimapButton.Refresh)
-ns.Listen("RARE_UPDATED", MinimapButton.Refresh)
+
+-- Sightings and sync answers come in bursts: one refresh per burst.
+local refreshPending = false
+ns.Listen("RARE_UPDATED", function()
+	if refreshPending then
+		return
+	end
+	refreshPending = true
+	C_Timer.After(0.5, function()
+		refreshPending = false
+		ns.SafeCall(MinimapButton.Refresh)
+	end)
+end)
+

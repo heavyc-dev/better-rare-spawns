@@ -654,6 +654,13 @@ check("coming back offers it again", Camp.Current() == 101)
 T.player.x, T.player.y = 0.90, 0.90
 T.Advance(15)
 check("walking away takes the bar down", Camp.Current() == nil and not BetterRareSpawnsCamp:IsShown())
+T.player.x, T.player.y = 0.30 + 200 / 3000, 0.30 -- 200 yards out
+Camp.Toggle()
+T.Advance(15)
+check("a camp started by hand from afar stays up", Camp.Current() == 101, Camp.Current())
+T.player.x, T.player.y = 0.90, 0.90
+T.Advance(15)
+check("and goes when walking further away", Camp.Current() == nil)
 ns.db.settings.camp.enabled = false
 T.player.x, T.player.y = 0.30, 0.30
 T.Advance(20)

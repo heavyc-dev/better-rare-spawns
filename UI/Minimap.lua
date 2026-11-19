@@ -69,6 +69,10 @@ local EDGE = 25
 -- player's map, which is what the minimap maths works in; map, x, y stay as
 -- the rare's own for the hover card.
 local function AddPoint(entry, state, zoneMap, x, y, playerMap)
+	local tracked = ns.tracked
+	if tracked and tracked.id == entry.id and tracked.map == zoneMap and tracked.x == x and tracked.y == y then
+		return -- drawn as the tracked waypoint instead
+	end
 	local mx, my = x, y
 	if zoneMap ~= playerMap then
 		mx, my = Util.ToMap(zoneMap, x, y, playerMap)
@@ -114,6 +118,20 @@ local function RebuildPoints(mapID)
 			AddZone(zoneMap, list, mapID)
 		end
 	end
+
+	-- The tracked waypoint, wherever it is on this continent: it is the one
+	-- point that stays on the rim when out of view.
+	local tracked = ns.tracked
+	local entry = tracked and tracked.map and tracked.x and Rares.Get(tracked.id)
+	if entry then
+		local mx, my = Util.ToMap(tracked.map, tracked.x, tracked.y, mapID)
+		if mx then
+			points[#points + 1] = {
+				id = entry.id, map = tracked.map, x = tracked.x, y = tracked.y, mx = mx, my = my,
+				state = Respawn.GetState(entry.id, nil, scratchState).state, rank = entry.rank, tracked = true,
+			}
+		end
+	end
 end
 
 local function ViewRadius()
@@ -151,8 +169,6 @@ local function Update()
 	if facing then
 		sin, cos = math.sin(facing), math.cos(facing)
 	end
-	local tracked = ns.tracked and ns.tracked.id
-
 	local used = 0
 	for _, point in ipairs(points) do
 		local dx, dy = Util.Offset(mapID, px, py, point.mx, point.my)
@@ -171,7 +187,8 @@ local function Update()
 				inside = distance <= radiusYards
 			end
 
-			local isTracked = tracked == point.id
+			local isTracked = point.tracked == true
+
 			if inside or isTracked then
 				if not inside then
 					-- Tracked rare beyond the edge: pin it to the rim.

@@ -72,9 +72,13 @@ local function PinOnEnter(self)
 			local id = hoverID
 			MapPins.Refresh() -- bring in its other spawn points
 			if not hoverID then
-				-- The redraw did not find the cursor on a pin; this one still has it.
+				-- The redraw did not find the cursor on a pin. The redraw hands pool
+				-- slots out again, so this frame only still has the cursor's rare
+				-- when it is shown and still leads with it.
 				hoverID = id
-				Card.Show(self, self.items)
+				if self:IsShown() and self.items and self.items[1] and self.items[1].id == id then
+					Card.Show(self, self.items)
+				end
 				UpdateGlow()
 			end
 			return
@@ -113,10 +117,9 @@ local function CreatePin(index)
 	pin:SetScript("OnEnter", PinOnEnter)
 	pin:SetScript("OnLeave", PinOnLeave)
 	pin:SetScript("OnClick", PinOnClick)
-	-- Right click keeps its map meaning (zoom out).
-	if pin.SetPassThroughButtons and not InCombatLockdown() then
-		pcall(pin.SetPassThroughButtons, pin, "RightButton")
-	end
+	-- Right click keeps its map meaning (zoom out). Not allowed in combat:
+	-- then it is applied by the first redraw after combat.
+	pin.needsPassThrough = pin.SetPassThroughButtons and true or nil
 
 	pin.glow = pin:CreateTexture(nil, "BACKGROUND")
 	pin.glow:SetTexture("Interface\\Minimap\\UI-Minimap-Ping-Expand")
@@ -247,19 +250,24 @@ local function CollectContinent(mapID, items, settings)
 	if not maps then
 		return
 	end
+	local done = {}
 	for zoneMap, list in pairs(maps) do
 		if Util.Translate(zoneMap, 50, 50, mapID) then
 			for _, entry in ipairs(list) do
-				if Passes(entry, settings) then
+				-- A rare with spawns in several zones is listed under each: one pin.
+				if not done[entry.id] and Passes(entry, settings) then
 					local state = StateOf(entry.id)
 					if ACTIVE[state] or Hunt.IsWanted(entry.id) then
-						local _, x, y = Status.BestPoint(entry.id, zoneMap)
+						-- A fresh sighting comes back on its own map, which need not
+						-- be zoneMap: translate from the map the point belongs to.
+						local pointMap, x, y = Status.BestPoint(entry.id, zoneMap)
 						local px, py
-						if x then
-							px, py = Util.Translate(zoneMap, x, y, mapID)
+						if pointMap and x then
+							px, py = Util.Translate(pointMap, x, y, mapID)
 						end
 						if px and px >= 0 and px <= 100 and py >= 0 and py <= 100 then
-							items[#items + 1] = { id = entry.id, map = zoneMap, x = x, y = y, px = px, py = py, state = state, rank = entry.rank }
+							done[entry.id] = true
+							items[#items + 1] = { id = entry.id, map = pointMap, x = x, y = y, px = px, py = py, state = state, rank = entry.rank }
 						end
 					end
 				end
@@ -273,7 +281,14 @@ local function ByPriority(a, b)
 	if pa ~= pb then
 		return pa < pb
 	end
-	return a.id < b.id
+	if a.id ~= b.id then
+		return a.id < b.id
+	end
+	-- A stable order keeps clusters (and pool slots) from shuffling.
+	if a.px ~= b.px then
+		return a.px < b.px
+	end
+	return a.py < b.py
 end
 
 -------------------------------------------------------------------------------
@@ -293,13 +308,33 @@ end
 
 local Redraw
 
+--- Hides the hover card only when one of our pins opened it: the journal,
+-- tracker and minimap share the same card.
+local function HideOwnCard()
+	for i = 1, #pins do
+		if Card.IsShownFor(pins[i]) then
+			Card.Hide(pins[i])
+			return
+		end
+	end
+end
+
+--- The frame under the cursor per the game, or nil when it cannot tell.
+local function MouseFocus()
+	if GetMouseFoci then
+		local foci = GetMouseFoci()
+		return foci and foci[1]
+	end
+	return GetMouseFocus and GetMouseFocus() or nil
+end
+
 local function HideAll()
 	for i = 1, active do
 		pins[i].pulse:Stop()
 		pins[i]:Hide()
 	end
 	active = 0
-	Card.Hide()
+	HideOwnCard()
 end
 
 function MapPins.Refresh()
@@ -371,6 +406,19 @@ Redraw = function()
 	local hovered
 	local previous = active
 	active = #clusters
+	-- A pin under the cursor only counts as hovered when the game agrees that
+	-- one of our pins has the mouse (a Blizzard pin above ours may have it).
+	local focus = MouseFocus()
+	local focusOurs = not focus
+	if focus then
+		for i = 1, #pins do
+			if pins[i] == focus then
+				focusOurs = true
+				break
+			end
+		end
+	end
+	local combat = InCombatLockdown()
 
 	for i, cluster in ipairs(clusters) do
 		local pin = pins[i] or CreatePin(i)
@@ -411,10 +459,16 @@ Redraw = function()
 		local quiet = first.state == "unknown" or first.state == "killed" or first.state == "dead"
 		pin:SetAlpha(settings.alpha * (quiet and 0.7 or 1))
 
-		local scale = pinScale * ((tracked and tracked == first.id) and 1.35 or 1)
+		pin.cx, pin.cy = cluster.cx, cluster.cy
+		pin.boost = (tracked and tracked == first.id) and 1.35 or 1
+		local scale = pinScale * pin.boost
 		pin:SetScale(scale)
 		pin:ClearAllPoints()
 		pin:SetPoint("CENTER", overlay, "TOPLEFT", cluster.cx / scale, -cluster.cy / scale)
+		if pin.needsPassThrough and not combat then
+			pin.needsPassThrough = nil
+			pcall(pin.SetPassThroughButtons, pin, "RightButton")
+		end
 		-- More interesting pins sit on top of less interesting ones.
 		pin:SetFrameLevel(overlay:GetFrameLevel() + 20 - (Respawn.PRIORITY[first.state] or 7))
 		pin.marks:SetFrameLevel(pin:GetFrameLevel() + 2)
@@ -426,7 +480,7 @@ Redraw = function()
 			pin.pulse:Stop()
 		end
 
-		if not hovered and pin:IsMouseOver() then
+		if not hovered and focusOurs and pin:IsMouseOver() then
 			hovered = pin
 		end
 	end
@@ -441,9 +495,33 @@ Redraw = function()
 		PinOnEnter(hovered)
 	else
 		hoverID = nil
-		Card.Hide()
+		if expandID and expandUntil == math.huge then
+			-- No pin has the cursor any more: let the expansion run out.
+			expandUntil = GetTime() + EXPAND_LINGER
+		end
+		HideOwnCard()
 		UpdateGlow()
 	end
+end
+
+--- Keeps the drawn pins the same size on screen while the map zooms. Only
+-- rescales and moves what is there; re-clustering waits for the throttled
+-- refresh.
+local function Rescale()
+	if not overlay or active == 0 then
+		return
+	end
+	local pinScale = Settings().scale / CanvasScale()
+	for i = 1, active do
+		local pin = pins[i]
+		if pin.cx then
+			local scale = pinScale * (pin.boost or 1)
+			pin:SetScale(scale)
+			pin:ClearAllPoints()
+			pin:SetPoint("CENTER", overlay, "TOPLEFT", pin.cx / scale, -pin.cy / scale)
+		end
+	end
+	dirty = true
 end
 
 --- Points a rare out on the map for a while (used by the journal).
@@ -543,8 +621,9 @@ local function Setup()
 	end)
 	overlay:SetScript("OnShow", MapPins.Refresh)
 	overlay:SetScript("OnHide", function()
-		Card.Hide()
+		HideOwnCard()
 	end)
+
 
 	if EventRegistry and EventRegistry.RegisterCallback then
 		EventRegistry:RegisterCallback("MapCanvas.MapSet", function()
@@ -554,7 +633,10 @@ local function Setup()
 		hooksecurefunc(WorldMapFrame, "OnMapChanged", MapPins.Refresh)
 	end
 	if WorldMapFrame.OnCanvasScaleChanged then
-		hooksecurefunc(WorldMapFrame, "OnCanvasScaleChanged", MapPins.Refresh)
+		-- Fires on every step of a smooth zoom: keep that cheap.
+		hooksecurefunc(WorldMapFrame, "OnCanvasScaleChanged", function()
+			ns.SafeCall(Rescale)
+		end)
 	end
 
 	CreateToggle()

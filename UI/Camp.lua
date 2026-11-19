@@ -23,6 +23,7 @@ local noticed = {} -- [npcID] = GetTime() of the last notice
 local frame
 local campID -- rare on the bar
 local manual = false
+local leaveDistance = FAR -- yards beyond which the player counts as gone
 local candidate, candidateSince
 local awaySince
 local dismissed -- rare the player closed the bar for
@@ -32,20 +33,55 @@ local function Settings()
 	return ns.db.settings.camp
 end
 
+--- Distance in yards from the player (on mapID at px, py) to the closest
+-- spawn point of `entry`, on any map the player's position can be related
+-- to (a cave or town has its own map; its rares are kept on the zone's).
+local function EntryDistance(entry, mapID, px, py)
+	local best
+	for spawnMap, points in pairs(entry.spawns) do
+		local qx, qy = px, py
+		if spawnMap ~= mapID then
+			qx, qy = Util.ToMap(mapID, px, py, spawnMap)
+		end
+		if qx then
+			for i = 1, #points, 2 do
+				local distance = Util.Distance(spawnMap, qx, qy, spawnMap, points[i], points[i + 1])
+				if distance and (not best or distance < best) then
+					best = distance
+				end
+			end
+		end
+	end
+	return best
+end
+
+--- The player's map and the maps above it (zone of a cave, ...).
+local function MapsAround(mapID)
+	local list = {}
+	local guard = 0
+	while mapID and mapID ~= 0 and guard < 3 do
+		list[#list + 1] = mapID
+		local info = C_Map.GetMapInfo(mapID)
+		mapID = info and info.parentMapID
+		guard = guard + 1
+	end
+	return list
+end
+
 --- Nearest rare with a spawn point within `range` yards: npcID, distance.
 -- Wanted rares win over closer ordinary ones.
 local function Nearest(range)
 	local mapID, px, py = Util.PlayerPosition()
-	local list = mapID and px and Rares.OnMap(mapID)
-	if not list then
+	if not mapID or not px then
 		return nil
 	end
 	local best, bestDistance, bestWanted
-	for _, entry in ipairs(list) do
-		if not Rares.IsIgnored(entry.id) then
-			local points = entry.spawns[mapID]
-			for i = 1, #points, 2 do
-				local distance = Util.Distance(mapID, px, py, mapID, points[i], points[i + 1])
+	local checked = {}
+	for _, listMap in ipairs(MapsAround(mapID)) do
+		for _, entry in ipairs(Rares.OnMap(listMap) or {}) do
+			if not checked[entry.id] and not Rares.IsIgnored(entry.id) then
+				checked[entry.id] = true
+				local distance = EntryDistance(entry, mapID, px, py)
 				if distance and distance <= range then
 					local wanted = Hunt.IsWanted(entry.id)
 					if not best or (wanted and not bestWanted) or (wanted == bestWanted and distance < bestDistance) then
@@ -58,21 +94,16 @@ local function Nearest(range)
 	return best, bestDistance
 end
 
+--- Yards to the rare's nearest spawn point. Second value: false when the
+-- player has no position at all (instances), so "nil" means unknown there,
+-- but "too far to relate" anywhere else.
 local function DistanceTo(npcID)
 	local mapID, px, py = Util.PlayerPosition()
 	local entry = Rares.Get(npcID)
-	local points = entry and mapID and px and entry.spawns[mapID]
-	if not points then
-		return nil
+	if not entry or not mapID or not px then
+		return nil, false
 	end
-	local best
-	for i = 1, #points, 2 do
-		local distance = Util.Distance(mapID, px, py, mapID, points[i], points[i + 1])
-		if distance and (not best or distance < best) then
-			best = distance
-		end
-	end
-	return best
+	return EntryDistance(entry, mapID, px, py), true
 end
 
 -------------------------------------------------------------------------------
@@ -179,6 +210,15 @@ function Camp.Start(npcID, byHand)
 	end
 	campID, manual, awaySince = npcID, byHand and true or false, nil
 	dismissed = nil
+	-- Started by hand from further out: leaving means walking further away
+	-- than that, not just being beyond the automatic range.
+	leaveDistance = FAR
+	if byHand then
+		local distance = DistanceTo(npcID)
+		if distance then
+			leaveDistance = math.max(FAR, distance + 60)
+		end
+	end
 	Hunt.Watch(npcID, true) -- sound when its window opens
 	Render()
 	frame:Show()
@@ -255,8 +295,8 @@ function Camp.Tick()
 	Notice(now)
 
 	if campID then
-		local distance = DistanceTo(campID)
-		if not distance or distance > FAR then
+		local distance, located = DistanceTo(campID)
+		if located and (not distance or distance > leaveDistance) then
 			awaySince = awaySince or now
 			if now - awaySince >= LEAVE then
 				Camp.Stop(false)
@@ -275,8 +315,9 @@ function Camp.Tick()
 	local nearest = Nearest(NEAR)
 	if dismissed then
 		-- Walking away resets a dismissal.
-		local distance = DistanceTo(dismissed)
-		if not distance or distance > FAR then
+		local distance, located = DistanceTo(dismissed)
+		if located and (not distance or distance > FAR) then
+
 			dismissed = nil
 		end
 	end
