@@ -120,6 +120,10 @@ ns.Listen("RARE_SEEN", function(npcID, info)
 		return
 	end
 	local entry = Rares.Get(npcID)
+	-- A rare only guessed from a vignette stays local until confirmed.
+	if entry and entry.unconfirmed then
+		return
+	end
 	local name = gsub(info.name or Rares.Name(npcID), ":", "")
 	Send("S" .. npcID, string.format("S:%d:%d:%d:%d:%s:%s:%s", npcID, info.map, info.x * 10, info.y * 10,
 		info.shard or "?", entry and entry.rank or "rare", name))

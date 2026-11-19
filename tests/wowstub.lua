@@ -232,6 +232,7 @@ function UnitCreatureType(unit) return U(unit, "type") end
 function UnitIsDead(unit) local d = U(unit, "dead") if d == nil then return false end return d end
 function UnitExists(unit) return T.units[unit] ~= nil end
 function UnitPlayerControlled() return false end
+function CheckInteractDistance(unit) local d = T.units[unit] return d ~= nil and not d.far end
 function GetRaidTargetIndex() return nil end
 function SetRaidTarget(unit, index) T.marked = index end
 

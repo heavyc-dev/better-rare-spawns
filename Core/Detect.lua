@@ -30,8 +30,17 @@ function Detect.IsNewGUID(guid)
 	return true
 end
 
+-- Creature GUIDs that died this session: anything they say afterwards (a
+-- death yell, an emote) is not a sign of life.
+local deadGUIDs = {}
+
 local function BreakWatch()
 	Respawn.BreakWatch()
+	-- The layer is unknown again until a creature here tells us.
+	if ns.currentShard ~= nil then
+		ns.currentShard = nil
+		ns.Fire("SHARD_CHANGED", nil)
+	end
 end
 ns.OnEvent("ZONE_CHANGED_NEW_AREA", BreakWatch)
 ns.OnEvent("SHARD_TRANSFER", BreakWatch)
@@ -81,23 +90,36 @@ function Detect.Unit(unit, source)
 	if not npcID then
 		return nil
 	end
+	-- Tamed or charmed creatures keep their npc id but are not spawns, and
+	-- they travel with their owner, so they say nothing about the layer.
+	if Clean(UnitPlayerControlled(unit)) then
+		return nil
+	end
 
-	-- Any creature tells us which shard (layer) the player is on.
+	-- Any wild creature tells us which shard (layer) the player is on.
 	if ns.currentShard ~= shard then
 		ns.currentShard = shard
 		ns.Fire("SHARD_CHANGED", shard)
 	end
 
 	local known = Rares.Get(npcID)
-	local class = RARE_CLASS[Clean(UnitClassification(unit)) or ""]
+	local rawClass = Clean(UnitClassification(unit))
+	local class = RARE_CLASS[rawClass or ""]
+	if known and not class and type(rawClass) == "string" then
+		-- The client says this creature is not a rare. Imported data can be
+		-- wrong for this client, and a vignette guess can be wrong too.
+		if known.unconfirmed then
+			Rares.Forget(npcID)
+			return nil
+		end
+		if known.imported and not known.learned then
+			return nil
+		end
+	end
 	if not known and not (class and Setting("learn")) then
 		return nil
 	end
 	if Rares.IsIgnored(npcID) then
-		return nil
-	end
-	-- Tamed or charmed creatures keep their npc id but are not spawns.
-	if Clean(UnitPlayerControlled(unit)) then
 		return nil
 	end
 
@@ -131,15 +153,23 @@ function Detect.Unit(unit, source)
 	end
 	local mapID, x, y = Util.PlayerPosition()
 
+	-- The player's position only stands in for the rare's spawn point when
+	-- the rare is close; nameplates and mouseover reach much further.
+	local close = false
+	if CheckInteractDistance then
+		local ok, inRange = pcall(CheckInteractDistance, unit, 4)
+		close = ok and Clean(inRange) == true
+	end
+
 	Rares.Learn(npcID, {
 		name = name,
 		level = level,
 		rank = class,
 		type = Clean(UnitCreatureType(unit)),
 		family = UnitCreatureFamily and Clean(UnitCreatureFamily(unit)) or nil,
-		map = mapID,
-		x = x,
-		y = y,
+		map = close and mapID or nil,
+		x = close and x or nil,
+		y = close and y or nil,
 	})
 
 	local newSpawn = Detect.IsNewGUID(guid)
@@ -199,7 +229,7 @@ end)
 
 local function SeenWithoutUnit(npcID, guid, source, mapID, x, y, name)
 	local entry = Rares.Get(npcID)
-	if not entry or Rares.IsIgnored(npcID) then
+	if not entry or Rares.IsIgnored(npcID) or (guid and deadGUIDs[guid]) then
 		return
 	end
 
@@ -247,12 +277,14 @@ local function CheckVignette(vignetteGUID)
 	end
 
 	if not Rares.Get(npcID) then
-		-- Unknown creature with a "kill" vignette: learn it as a rare.
+		-- Unknown creature with a "kill" vignette: probably a rare, but kill
+		-- vignettes also mark event bosses and elites. It is kept as
+		-- unconfirmed (not shared) until a unit shows its classification.
 		local atlas = Clean(info.atlasName)
 		if not Setting("learn") or type(atlas) ~= "string" or not strfind(atlas, "VignetteKill", 1, true) then
 			return
 		end
-		Rares.Learn(npcID, { name = Clean(info.name), rank = "rare" })
+		Rares.Learn(npcID, { name = Clean(info.name), rank = "rare", unconfirmed = true })
 	end
 
 	local mapID = C_Map.GetBestMapForUnit("player")
@@ -280,18 +312,28 @@ if C_VignetteInfo then
 		end
 	end)
 
-	local lastSweep = 0
-	ns.OnEvent("VIGNETTES_UPDATED", function()
-		local now = GetTime()
-		if now - lastSweep < 5 then
-			return
-		end
-		lastSweep = now
+	local SWEEP_GAP = 5
+	local lastSweep, sweepPending = -SWEEP_GAP, false
+	local function Sweep()
+		sweepPending = false
+		lastSweep = GetTime()
 		local list = C_VignetteInfo.GetVignettes()
 		if list then
 			for _, vignetteGUID in ipairs(list) do
 				CheckVignette(vignetteGUID)
 			end
+		end
+	end
+	ns.OnEvent("VIGNETTES_UPDATED", function()
+		local wait = SWEEP_GAP - (GetTime() - lastSweep)
+		if wait <= 0 then
+			Sweep()
+		elseif not sweepPending then
+			-- Throttled: one sweep at the end of the gap catches what changed.
+			sweepPending = true
+			C_Timer.After(wait, function()
+				ns.SafeCall(Sweep)
+			end)
 		end
 	end)
 end
@@ -313,7 +355,7 @@ local function OnMonsterChat(message, name, ...)
 	local list = name and mapID and Rares.OnMap(mapID)
 	if list then
 		for _, entry in ipairs(list) do
-			if Rares.Name(entry.id) == name then
+			if Rares.LocalName(entry.id) == name then
 				SeenWithoutUnit(entry.id, nil, "yell", mapID, nil, nil, name)
 				return
 			end
@@ -333,6 +375,8 @@ local function OnDeath(guid)
 	if not npcID or not Rares.Get(npcID) then
 		return
 	end
+	deadGUIDs[guid] = true
+	seenGUIDs[guid] = true -- whatever shows this creature now is its corpse
 	local now = GetServerTime()
 	if Respawn.RecordDeath(npcID, shard, now, false) then
 		ns.Fire("RARE_DIED", npcID, shard, now, false)
@@ -367,33 +411,92 @@ end
 -- Loot: remember what each rare has dropped for this account
 -------------------------------------------------------------------------------
 
-local lootedCorpses = {}
+local lootedCorpses = {} -- [guid .. ":" .. itemID] = true, counted once per corpse
+
+-- Skinning, mining, herb gathering and pick pocketing are casts that end in a
+-- loot window for the creature's GUID. Looting a corpse is not a cast. A loot
+-- window right after a finished cast is therefore not corpse loot.
+local timedCast -- castGUID of the player's cast in progress that has a cast time
+local lastHarvest = -math.huge
+local HARVEST_GAP = 1
+
+-- Only the player's own casts matter: a unit event keeps the rest of the
+-- world's spellcasts away from this handler.
+local castFrame = CreateFrame("Frame")
+for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_CHANNEL_START", "UNIT_SPELLCAST_SUCCEEDED" }) do
+	pcall(castFrame.RegisterUnitEvent, castFrame, event, "player")
+end
+castFrame:SetScript("OnEvent", function(_, event, _, castGUID, spellID)
+	if event == "UNIT_SPELLCAST_START" then
+		timedCast = castGUID
+	elseif event == "UNIT_SPELLCAST_CHANNEL_START" then
+		lastHarvest = GetTime()
+	else
+		-- Pick Pocket (921) is instant.
+		if (castGUID and castGUID == timedCast) or spellID == 921 then
+			lastHarvest = GetTime()
+		end
+		if castGUID == timedCast then
+			timedCast = nil
+		end
+	end
+end)
+
+--- True when a unit the player can see has this GUID and is alive.
+local function AliveNearby(guid)
+	for _, unit in ipairs({ "target", "mouseover", "softinteract", "softenemy" }) do
+		if Clean(UnitGUID(unit)) == guid then
+			local dead = UnitIsDead(unit)
+			if issecretvalue and issecretvalue(dead) then
+				return false
+			end
+			return not dead
+		end
+	end
+	return false
+end
 
 ns.OnEvent("LOOT_OPENED", function()
+	if IsFishingLoot and IsFishingLoot() then
+		return
+	end
+	if GetTime() - lastHarvest <= HARVEST_GAP then
+		return
+	end
 	local count = GetNumLootItems and GetNumLootItems() or 0
+	local handled = {}
 	for slot = 1, count do
 		local guid = GetLootSourceInfo and Clean((GetLootSourceInfo(slot)))
 		local npcID, shard = Util.ParseGUID(guid)
-		if npcID and Rares.Get(npcID) then
-			if Respawn.RecordDeath(npcID, shard, GetServerTime(), true) then
-				ns.Fire("RARE_DIED", npcID, shard, GetServerTime(), true)
+		if npcID and Rares.Get(npcID) and not AliveNearby(guid) then
+			if not handled[guid] then
+				handled[guid] = true
+				local now = GetServerTime()
+				if Respawn.RecordDeath(npcID, shard, now, true) then
+					ns.Fire("RARE_DIED", npcID, shard, now, true)
+				end
+				Hunt.Credit(npcID, guid) -- loot rights are kill credit
 			end
-			Hunt.Credit(npcID, guid) -- loot rights are kill credit
 
-			local key = guid .. ":" .. slot
 			local link = GetLootSlotLink(slot)
 			local itemID = type(link) == "string" and tonumber(strmatch(link, "item:(%d+)"))
 			local _, _, _, _, quality = GetLootSlotInfo(slot)
 			quality = Clean(quality)
-			if itemID and not lootedCorpses[key] and quality and quality >= 2 then
+			local key = itemID and (guid .. ":" .. itemID)
+			if key and not lootedCorpses[key] and quality and quality >= 2 then
 				lootedCorpses[key] = true
 				local loot = ns.db.loot[npcID]
 				if not loot then
 					loot = {}
 					ns.db.loot[npcID] = loot
 				end
+				local first = loot[itemID] == nil
 				loot[itemID] = (loot[itemID] or 0) + 1
+				if first then
+					Hunt.LootLearned(itemID)
+				end
 			end
 		end
 	end
 end)
+

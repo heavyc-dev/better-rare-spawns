@@ -133,7 +133,10 @@ local function ShowCard(npcID, info)
 		end
 
 		local name = info.name or Rares.Name(npcID)
-		card:SetAttribute("macrotext", "/cleartarget\n/targetexact " .. name)
+		-- /targetexact needs the name as this client spells it. A name from a
+		-- unit here is; a name in someone else's report may not be.
+		local targetName = (not info.by and info.name) or Rares.LocalName(npcID)
+		card:SetAttribute("macrotext", targetName and ("/cleartarget\n/targetexact " .. targetName) or "")
 
 		local entry = Rares.Get(npcID)
 		local color = Status.RANK_COLORS[entry and entry.rank or "rare"] or Status.RANK_COLORS.rare
@@ -152,8 +155,14 @@ local function ShowCard(npcID, info)
 		card.where:SetText(table.concat(parts, "  |  "))
 
 		card.model:ClearModel()
+		-- The card may have waited for combat to end: by then the unit token
+		-- can point at another creature.
 		local unit = info.unit
+		if unit and info.guid and ns.Clean(UnitGUID(unit)) ~= info.guid then
+			unit = nil
+		end
 		if unit and ns.Clean(UnitExists(unit)) then
+
 			pcall(card.model.SetUnit, card.model, unit)
 		else
 			pcall(card.model.SetCreature, card.model, npcID)

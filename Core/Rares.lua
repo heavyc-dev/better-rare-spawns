@@ -50,10 +50,9 @@ local function MergeInto(entry, source, origin)
 	entry.quests = entry.quests or source.quests
 	entry.family = entry.family or source.family
 	entry.skin = entry.skin or source.skin
-	entry.dungeon = entry.dungeon or source.dungeon
-	entry.quests = entry.quests or source.quests
-	entry.family = entry.family or source.family
-	entry.skin = entry.skin or source.skin
+	if origin == "learned" then
+		entry.unconfirmed = source.unconfirmed
+	end
 	entry[origin] = true
 	if source.spawns then
 		for mapID, points in pairs(source.spawns) do
@@ -116,6 +115,24 @@ function Rares.Name(npcID)
 	end
 	local entry = entries[npcID]
 	return entry and entry.name or ("NPC " .. tostring(npcID))
+end
+
+local ENGLISH = { enUS = true, enGB = true }
+
+--- The name exactly as this client spells it, or nil when not known. Use it
+-- where a name must match the game (/targetexact, yells): imported and shared
+-- names are English and only match on English clients.
+function Rares.LocalName(npcID)
+	local localized = ns.db.names[GetLocale()]
+	local name = localized and localized[npcID]
+	if name then
+		return name
+	end
+	if ENGLISH[GetLocale()] then
+		local entry = entries[npcID]
+		return entry and entry.name or nil
+	end
+	return nil
 end
 
 function Rares.IsIgnored(npcID)
@@ -193,18 +210,6 @@ function Rares.QuestFromItem(itemID)
 	return items and items[itemID] or nil
 end
 
---- Name of a quest the import met (started by a rare or by a drop), or nil.
-function Rares.QuestName(questID)
-	local names = ns.db.imported and ns.db.imported.questNames
-	return names and names[questID] or nil
-end
-
---- Quest id started by an item, or nil.
-function Rares.QuestFromItem(itemID)
-	local items = ns.db.imported and ns.db.imported.questItems
-	return items and items[itemID] or nil
-end
-
 --- Items this rare can drop: { { id = itemID, seen = timesLootedOrNil }, ... }.
 -- What this account looted comes first, then the imported list.
 function Rares.Drops(npcID)
@@ -238,13 +243,15 @@ end
 -------------------------------------------------------------------------------
 
 --- Remembers a rare seen in the world.
--- info: { name, level, rank ("rare"/"rareelite"), type, map, x, y }
+-- info: { name, level, rank ("rare"/"rareelite"), type, map, x, y,
+--         remote = name came from another player (maybe another locale),
+--         unconfirmed = only a vignette suggested it is a rare }
 -- Returns true when something new was stored.
 function Rares.Learn(npcID, info)
 	local db = ns.db
 	local changed = false
 
-	if info.name then
+	if info.name and not info.remote then
 		local locale = GetLocale()
 		db.names[locale] = db.names[locale] or {}
 		db.names[locale][npcID] = info.name
@@ -252,22 +259,22 @@ function Rares.Learn(npcID, info)
 
 	local data = db.learned[npcID]
 	if not data then
-		data = { name = info.name, level = info.level, rank = info.rank, type = info.type, spawns = {} }
+		data = { name = info.name, level = info.level, rank = info.rank, type = info.type, spawns = {},
+			unconfirmed = info.unconfirmed or nil }
 		db.learned[npcID] = data
 		changed = true
 	else
-		data.level = info.level or data.level
-		data.rank = info.rank or data.rank
-		data.type = info.type or data.type
-	end
-	-- Things only the live creature (or its corpse) reveals.
-	if info.family and data.family ~= info.family then
-		data.family = info.family
-		changed = true
-	end
-	if info.skin and data.skin ~= info.skin then
-		data.skin = info.skin
-		changed = true
+		for _, field in ipairs({ "level", "rank", "type" }) do
+			if info[field] ~= nil and data[field] ~= info[field] then
+				data[field] = info[field]
+				changed = true
+			end
+		end
+		-- A unit showed its rare classification: no longer a guess.
+		if data.unconfirmed and info.rank and not info.unconfirmed then
+			data.unconfirmed = nil
+			changed = true
+		end
 	end
 	-- Things only the live creature (or its corpse) reveals.
 	if info.family and data.family ~= info.family then
@@ -469,15 +476,6 @@ function Rares.ImportQuestie(force)
 									questItems[itemID] = false
 								end
 							end
-							if questItems[itemID] == nil then
-								local okQuest, questID = pcall(itemDB.Get, itemID, "startQuest")
-								if okQuest and type(questID) == "number" and questID > 0 then
-									questItems[itemID] = questID
-									QuestName(questID)
-								else
-									questItems[itemID] = false
-								end
-							end
 							local list = drops[npcID]
 							if not list then
 								list = {}
@@ -513,15 +511,22 @@ function Rares.ImportQuestie(force)
 			local okRank, rank = pcall(npcDB.Get, npcID, "rank")
 			local rankName = okRank and RANK_NAMES[rank]
 			if rankName then
-				local _, name = pcall(npcDB.Get, npcID, "name")
-				local _, level = pcall(npcDB.Get, npcID, "maxLevel")
-				local _, spawns = pcall(npcDB.Get, npcID, "spawns")
-				local _, minLevel = pcall(npcDB.Get, npcID, "minLevel")
-				local _, health = pcall(npcDB.Get, npcID, "maxLevelHealth")
-				local _, sub = pcall(npcDB.Get, npcID, "subName")
-				local _, friendly = pcall(npcDB.Get, npcID, "friendlyToFaction")
-				local _, questStarts = pcall(npcDB.Get, npcID, "questStarts")
-				local _, questStarts = pcall(npcDB.Get, npcID, "questStarts")
+				-- A failed pcall returns the error text: never take that as data.
+				local function Field(key)
+					local okField, value = pcall(npcDB.Get, npcID, key)
+					if okField then
+						return value
+					end
+					return nil
+				end
+				local name = Field("name")
+				local level = Field("maxLevel")
+				local spawns = Field("spawns")
+				local minLevel = Field("minLevel")
+				local health = Field("maxLevelHealth")
+				local sub = Field("subName")
+				local friendly = Field("friendlyToFaction")
+				local questStarts = Field("questStarts")
 				local data = {
 					name = type(name) == "string" and name or nil,
 					level = type(level) == "number" and level or nil,
@@ -533,15 +538,7 @@ function Rares.ImportQuestie(force)
 					spawns = {},
 				}
 				if type(questStarts) == "table" and #questStarts > 0 then
-					data.quests = {}
-					for i = 1, math.min(#questStarts, 4) do
-						if type(questStarts[i]) == "number" then
-							data.quests[#data.quests + 1] = questStarts[i]
-							QuestName(questStarts[i])
-						end
-					end
-				end
-				if type(questStarts) == "table" and #questStarts > 0 then
+
 					data.quests = {}
 					for i = 1, math.min(#questStarts, 4) do
 						if type(questStarts[i]) == "number" then

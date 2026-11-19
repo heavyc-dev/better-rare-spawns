@@ -52,10 +52,13 @@ function Scan.Candidates()
 				end
 			end
 			-- Without a usable position, every rare of the zone is a candidate.
-			if not px or (nearest and nearest <= range) then
+			-- /targetexact only matches the name as this client spells it.
+			local localName = Rares.LocalName(entry.id)
+			if localName and (not px or (nearest and nearest <= range)) then
 				local state = Respawn.GetState(entry.id, nil, scratchState).state
 				found[#found + 1] = {
-					name = Rares.Name(entry.id),
+					name = localName,
+
 					distance = nearest or 0,
 					-- Known-dead rares go last: they are the least likely hit.
 					rank = (state == "dead" or state == "killed") and 2 or 1,

@@ -739,6 +739,40 @@ T.Update(1.1)
 T.Update(11)
 
 -------------------------------------------------------------------------------
+section("detection review fixes")
+T.units.nameplate5 = { guid = Guid(5600, "FAR0000001"), name = "Distant Rare", level = 30, class = "rare", far = true }
+T.Fire("NAME_PLATE_UNIT_ADDED", "nameplate5")
+check("far sighting learns the rare but no spawn point", ns.Rares.Get(5600) and next(ns.Rares.Get(5600).spawns) == nil)
+T.units.nameplate5 = nil
+
+-- Loot: a corpse counts, a harvest cast just before the window does not.
+local lootGUID = Guid(5600, "LOOT000001")
+local lootSlots = { { link = "item:7001", quality = 3 } }
+function GetNumLootItems() return #lootSlots end
+function GetLootSourceInfo() return lootGUID end
+function GetLootSlotLink(slot) return "|Hitem:" .. lootSlots[slot].link:match("%d+") .. "|h" end
+function GetLootSlotInfo(slot) return nil, nil, 1, nil, lootSlots[slot].quality end
+local killsBefore = ns.Hunt.Kills(5600)
+T.Fire("LOOT_OPENED")
+check("corpse loot counts a drop and credit", ns.db.loot[5600] and ns.db.loot[5600][7001] == 1 and ns.Hunt.Kills(5600) == killsBefore + 1)
+T.Fire("LOOT_OPENED")
+check("reopening a corpse does not count again", ns.db.loot[5600][7001] == 1)
+lootGUID = Guid(5600, "LOOT000002")
+lootSlots = { { link = "item:7002", quality = 2 } }
+T.units.target = { guid = lootGUID, name = "Distant Rare", class = "rare" } -- alive: pick pocket
+T.Fire("LOOT_OPENED")
+check("loot from a living rare is not a kill", ns.db.loot[5600][7002] == nil and ns.Hunt.Kills(5600) == killsBefore + 1)
+T.units.target = nil
+
+-- Yell from a creature that just died is not a sighting.
+local yellGUID = Guid(5600, "YELL000001")
+T.Fire("UNIT_DIED", yellGUID)
+T.Advance(20)
+local seenBefore = #seen
+T.Fire("CHAT_MSG_MONSTER_YELL", "Avenge me!", "Distant Rare", nil, nil, nil, nil, nil, nil, nil, nil, nil, yellGUID)
+check("death yell does not bring the rare back", #seen == seenBefore and ns.Respawn.GetState(5600, "4444-0-77").state ~= "up")
+
+-------------------------------------------------------------------------------
 check("no Lua errors anywhere", #T.errors == 0, table.concat(T.errors, "\n"))
 print(string.format("%d passed, %d failed", passed, failed))
 return failed
