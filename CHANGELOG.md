@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.1.0
+
+Fixes from a full review of the addon.
+
+Sharing
+- Messages from other players are checked much more strictly: whole numbers only, real layer ids, no UI escape
+  codes in rare names. Whispers are ignored, and timer sync requests are only answered in the guild.
+- Other players can no longer flood you: each sender is rate limited and can teach at most a few new rares per
+  session, and only when "learn new rares" is on.
+- Guild sync now shares learned spawn windows as windows. They are used until you measure your own, and no
+  longer wear down real measurements.
+- Live sightings go out before sync traffic. Group sharing works in dungeon finder and LFR groups.
+- `/brs sync` tells you when receiving is turned off.
+
+Timers
+- A rare seen on another layer no longer hides the death timer on your layer.
+- A sighting that arrives just after a kill no longer shows the rare as up again.
+- Looking at or looting a corpse again no longer moves the death time later.
+- Old layer data is cleaned up automatically.
+- Spawn-window notices no longer fire falsely after changing layers or turning notices back on.
+
+Detection
+- Skinning, mining, herb gathering, pick pocketing and fishing no longer count as a kill or a drop. Drops count
+  once per corpse.
+- Spawn points are only learned when the rare is close, not from a distant nameplate.
+- Rares found only through a map vignette stay unconfirmed and are not shared until you see one.
+- Death yells no longer count as sightings.
+- The scan key and alert card use the name as your client spells it on non-English clients.
+
+Map, minimap and windows
+- Continent map pins are placed correctly for fresh sightings and show each rare once.
+- Only the tracked waypoint sits on the minimap edge.
+- Smoother zooming on busy maps, and pins created in combat still let right-click zoom out.
+- `/brs camp` from further away no longer closes after a few seconds, and camping works in caves and towns.
+- The journal's Wanted checkbox no longer covers the All rares tab, and the drop search no longer floods the
+  server with item requests.
+- Hover cards follow the row under the cursor, and the map no longer closes cards opened by other windows.
+- Options "Defaults" now hides the tracker and resets the minimap button position.
+
 ## 1.0.0
 
 First public release.
