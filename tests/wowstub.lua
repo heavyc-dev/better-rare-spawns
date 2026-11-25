@@ -261,7 +261,14 @@ function GetItemInfo(itemID)
 	local item = T.items[itemID]
 	if item then return item[1], "[" .. item[1] .. "]", item[2] end
 end
-function Ambiguate(name) return (name:gsub("%-.*", "")) end
+-- The player is "Tester" on "Realm". "none" keeps the realm of other realms.
+function GetNormalizedRealmName() return "Realm" end
+function Ambiguate(name, mode)
+	if mode == "none" then
+		return (name:gsub("%-Realm$", ""))
+	end
+	return (name:gsub("%-.*", ""))
+end
 function PlaySound(kit) T.sound = kit end
 function FlashClientIcon() T.flashed = true end
 function GetCVar() return "0" end
@@ -318,8 +325,11 @@ C_Map = {
 	GetAreaInfo = function(areaID) return ({ [12] = "Elwynn Forest", [44] = "Redridge Mountains" })[areaID] end,
 	SetUserWaypoint = function(point) T.waypoint = point end,
 	ClearUserWaypoint = function() T.waypoint = nil end,
+	GetUserWaypoint = function() return T.waypoint end,
 }
-UiMapPoint = { CreateFromCoordinates = function(mapID, x, y) return { mapID = mapID, x = x, y = y } end }
+UiMapPoint = { CreateFromCoordinates = function(mapID, x, y)
+	return { uiMapID = mapID, position = Vector(x, y) }
+end }
 C_SuperTrack = { SetSuperTrackedUserWaypoint = noop }
 C_VignetteInfo = {
 	GetVignettes = function() return {} end,

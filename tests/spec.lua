@@ -290,6 +290,9 @@ pin.__scripts.OnLeave(pin)
 check("hover card closes on leave", not BetterRareSpawnsCard:IsShown())
 pin.__scripts.OnClick(pin)
 check("click sets a waypoint and tracks", T.waypoint ~= nil and ns.tracked and ns.tracked.id == pin.items[1].id)
+pin.__scripts.OnClick(pin)
+check("clicking the tracked pin again stops tracking", T.waypoint == nil and ns.tracked == nil)
+pin.__scripts.OnClick(pin)
 T.alt = true
 local hiddenID = pin.items[1].id
 pin.__scripts.OnClick(pin)
@@ -580,7 +583,7 @@ T.Advance(60)
 local sawZ, sawD, sawR = false, false, false
 for _, message in ipairs(T.sent) do
 	if message[3] == "GUILD" then
-		if message[2] == "Z:1:Newcomer" then sawZ = true end
+		if message[2] == "Z:1:Newcomer-Realm" then sawZ = true end
 		if message[2]:find("^D:101:") then sawD = true end
 		if message[2]:find("^W:101:%d+:%d+$") then sawR = true end
 	end
@@ -791,6 +794,102 @@ check("death yell does not bring the rare back", #seen == seenBefore and ns.Resp
 ns.Tracker.Toggle(true)
 ns.DB.ResetSettings()
 check("restoring defaults hides the tracker", not BetterRareSpawnsTracker:IsShown() and ns.db.settings.tracker.shown == false)
+
+-------------------------------------------------------------------------------
+section("waypoints")
+local live = {}
+local function Live()
+	local n = 0
+	for _ in pairs(live) do n = n + 1 end
+	return n
+end
+TomTom = {
+	AddWaypoint = function(_, mapID, x, y)
+		local uid = { mapID, x, y }
+		live[uid] = true
+		return uid
+	end,
+	RemoveWaypoint = function(_, uid) live[uid] = nil end,
+}
+T.waypoint = "set by hand"
+ns.Status.SetWaypoint(100)
+ns.Status.SetWaypoint(5600, 1429, 30, 30)
+check("a new TomTom waypoint replaces the last one", Live() == 1, Live())
+SlashCmdList.BETTERRARESPAWNS("untrack")
+check("untrack removes the TomTom waypoint", Live() == 0 and ns.tracked == nil)
+check("the player's own map pin is left alone", T.waypoint == "set by hand")
+TomTom = nil
+T.waypoint = nil
+
+ns.Status.SetWaypoint(100)
+check("without TomTom the map pin is used", T.waypoint ~= nil)
+T.waypoint = { uiMapID = 1433, position = CreateVector2D(0.1, 0.1) } -- the player moved it
+ns.Status.ClearWaypoint()
+check("a pin the player moved is not removed", T.waypoint ~= nil and ns.tracked == nil)
+T.waypoint = nil
+
+ns.Status.SetWaypoint(100)
+T.Advance(60)
+T.Fire("UNIT_DIED", Guid(100, "TRK0000001"))
+check("the tracked rare dying stops tracking", ns.tracked == nil and T.waypoint == nil)
+
+-------------------------------------------------------------------------------
+section("review fixes: import, sharing, saved variables")
+-- An import that hits an error must not block the next one.
+local goodSpawns = questie[100].spawns
+questie[100].spawns = { [12] = { 5 } } -- a point that is not a table
+check("import starts", ns.Rares.ImportQuestie(true) == true)
+T.Advance(1)
+check("the broken import reported its error", #T.errors == 1 and Said("import stopped on an error") == 1, #T.errors)
+T.errors = {}
+questie[100].spawns = goodSpawns
+check("a new import can start after a failed one", ns.Rares.ImportQuestie(true) == true)
+T.Advance(1)
+check("and it finishes", ns.Rares.Get(100) and ns.Rares.Get(100).spawns[1429] ~= nil and ns.Rares.Get(100).imported)
+
+-- A rare only another player told us about is a guess until seen here.
+ns.Share.OnMessage("BRS1", "S:790:1429:500:500:?:rare:Planted Boar", "GUILD", "Planter-Realm")
+ns.Share.OnMessage("BRS1", "S:791:1429:600:600:?:rare:Honest Rare", "GUILD", "Planter-Realm")
+check("a shared unknown rare is unconfirmed", ns.Rares.Get(790) and ns.Rares.Get(790).unconfirmed == true)
+local seenPlanted = #seen
+T.units.nameplate6 = { guid = Guid(790, "PLANT00001"), name = "Planted Boar", level = 5, class = "normal" }
+T.Fire("NAME_PLATE_UNIT_ADDED", "nameplate6")
+check("a normal creature shared as a rare is forgotten, not announced", ns.Rares.Get(790) == nil and #seen == seenPlanted)
+T.units.nameplate6 = { guid = Guid(791, "HONEST0001"), name = "Honest Rare", level = 9, class = "rare" }
+T.Fire("NAME_PLATE_UNIT_ADDED", "nameplate6")
+check("a real one is confirmed on sight", ns.Rares.Get(791) and ns.Rares.Get(791).unconfirmed == nil)
+T.units.nameplate6 = nil
+
+-- Players are told apart by realm.
+local seenRealm = #seen
+ns.Share.OnMessage("BRS1", "S:791:1429:600:600:?:rare:Honest Rare", "GUILD", "Tester-Elsewhere")
+check("a namesake on another realm is not mistaken for the player",
+	#seen == seenRealm + 1 and seen[#seen].info.by == "Tester-Elsewhere", seen[#seen].info.by)
+
+T.Advance(300)
+T.sent = {}
+ns.Share.OnMessage("BRS1", "Q:1", "GUILD", "Asker-Realm")
+ns.Share.OnMessage("BRS1", "Z:1:Asker-Realm", "GUILD", "Friend-Realm")
+T.Advance(60)
+check("an answer naming the requester in full is recognised", #T.sent == 0, #T.sent)
+ns.Share.OnMessage("BRS1", "Q:1", "GUILD", "Asker-Realm")
+T.Advance(60)
+check("and without one the request is answered", T.sent[1] and T.sent[1][2] == "Z:1:Asker-Realm", T.sent[1] and T.sent[1][2])
+
+ns.db.settings.share.guild = false
+local sent, why = ns.Share.RequestSync()
+check("no sync request with guild sharing off", sent == false and why == "off")
+ns.db.settings.share.guild = true
+
+do -- saved variables from before the schema number
+	local current = BetterRareSpawnsDB
+	BetterRareSpawnsDB = { settings = { camp = { enabled = true }, alerts = { instances = false } } }
+	ns.DB.Load()
+	check("saved variables without a schema get every migration",
+		ns.db.settings.camp.enabled == false and ns.db.settings.alerts.instances == true)
+	BetterRareSpawnsDB = current
+	ns.db = current
+end
 
 -------------------------------------------------------------------------------
 check("no Lua errors anywhere", #T.errors == 0, table.concat(T.errors, "\n"))

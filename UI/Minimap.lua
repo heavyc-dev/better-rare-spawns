@@ -51,7 +51,7 @@ local function CreatePin(index)
 		pcall(pin.SetMouseClickEnabled, pin, false)
 	end
 	pin:SetScript("OnEnter", function(self)
-		Card.Show(self, { self.item }, "Shown on your map - click the map pin to track")
+		Card.Show(self, { self.item }, "Shown on your map - click the map pin to track, again to stop")
 	end)
 	pin:SetScript("OnLeave", function(self)
 		Card.Hide(self)

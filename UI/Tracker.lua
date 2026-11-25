@@ -33,7 +33,7 @@ local function RowOnClick(self)
 	elseif IsShiftKeyDown() then
 		Status.LinkToChat(item.id, item.map, item.x, item.y)
 	else
-		Status.SetWaypoint(item.id, item.map, item.x, item.y)
+		Status.ToggleWaypoint(item.id, item.map, item.x, item.y, true)
 	end
 end
 

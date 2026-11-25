@@ -68,25 +68,48 @@ local function MergeInto(entry, source, origin)
 	end
 end
 
+--- The merged entry of one rare from both sources, or nil when neither has it.
+local function BuildEntry(npcID)
+	local db = ns.db
+	local learned = db.learned[npcID]
+	local imported = db.imported and db.imported.rares and db.imported.rares[npcID]
+	if not learned and not imported then
+		return nil
+	end
+	local entry = { id = npcID, spawns = {} }
+	-- Learned data first: what the player saw wins over imported guesses.
+	if learned then
+		MergeInto(entry, learned, "learned")
+	end
+	if imported then
+		MergeInto(entry, imported, "imported")
+	end
+	return entry
+end
+
 local function Rebuild()
 	wipe(entries)
 	byMap = nil
 	local db = ns.db
-
-	-- Learned data first: what the player saw wins over imported guesses.
-	for _, origin in ipairs({ "learned", "imported" }) do
-		local source = origin == "learned" and db.learned or (db.imported and db.imported.rares)
-		if source then
-			for npcID, data in pairs(source) do
-				local entry = entries[npcID]
-				if not entry then
-					entry = { id = npcID, spawns = {} }
-					entries[npcID] = entry
-				end
-				MergeInto(entry, data, origin)
+	for npcID in pairs(db.learned) do
+		entries[npcID] = BuildEntry(npcID)
+	end
+	local imported = db.imported and db.imported.rares
+	if imported then
+		for npcID in pairs(imported) do
+			if not entries[npcID] then
+				entries[npcID] = BuildEntry(npcID)
 			end
 		end
 	end
+	ns.Fire("RARES_CHANGED")
+end
+
+--- One rare changed: merge that one again instead of the whole registry
+-- (which is thousands of entries with an imported database).
+local function RebuildOne(npcID)
+	entries[npcID] = BuildEntry(npcID)
+	byMap = nil
 	ns.Fire("RARES_CHANGED")
 end
 
@@ -168,7 +191,8 @@ function Rares.Maps()
 	return byMap
 end
 
---- Nearest known spawn point of a rare on a map: x, y, distanceYards.
+--- Nearest known spawn point of a rare on a map: x, y (nil when it has none).
+-- Without a position to measure from, the first point is returned.
 function Rares.NearestPoint(npcID, mapID, x, y)
 	local entry = entries[npcID]
 	local points = entry and entry.spawns[mapID]
@@ -305,7 +329,7 @@ function Rares.Learn(npcID, info)
 	end
 
 	if changed then
-		Rebuild()
+		RebuildOne(npcID)
 	end
 	return changed
 end
@@ -387,11 +411,34 @@ end
 
 local importing = false
 
+--- True when QuestieDB's creature table can be read right now.
+function Rares.QuestieAvailable()
+	local npcDB = _G.NpcDB
+	return type(npcDB) == "table" and type(npcDB.GetAllIds) == "function" and type(npcDB.Get) == "function"
+end
+
+--- Runs one import step on the next frame. A step that fails ends the import:
+-- without this the "import running" flag would stay set until a reload.
+local function NextFrame(step)
+	C_Timer.After(0, function()
+		local ok = xpcall(step, function(err)
+			local handler = geterrorhandler and geterrorhandler()
+			if handler then
+				handler(err)
+			end
+		end)
+		if not ok and importing then
+			importing = false
+			ns.Print("The QuestieDB import stopped on an error. Try /brs import again.")
+		end
+	end)
+end
+
 --- Reads every rare from QuestieDB in small batches (it decodes each row on
 -- access, so doing 15k of them in one frame would hitch).
 function Rares.ImportQuestie(force)
 	local npcDB = _G.NpcDB
-	if importing or type(npcDB) ~= "table" or type(npcDB.GetAllIds) ~= "function" or type(npcDB.Get) ~= "function" then
+	if importing or not Rares.QuestieAvailable() then
 		return false
 	end
 
@@ -491,7 +538,7 @@ function Rares.ImportQuestie(force)
 			end
 			itemIndex = stop + 1
 			if itemIndex <= itemTotal then
-				C_Timer.After(0, function() ns.SafeCall(ItemStep) end)
+				NextFrame(ItemStep)
 			else
 				for itemID, questID in pairs(questItems) do
 					if not questID then
@@ -579,13 +626,13 @@ function Rares.ImportQuestie(force)
 
 		index = stop + 1
 		if index <= total then
-			C_Timer.After(0, function() ns.SafeCall(Step) end)
+			NextFrame(Step)
 		else
 			ImportDrops()
 		end
 	end
 
-	C_Timer.After(0, function() ns.SafeCall(Step) end)
+	NextFrame(Step)
 	return true
 end
 
@@ -593,7 +640,7 @@ end
 function Rares.Forget(npcID)
 	if ns.db.learned[npcID] then
 		ns.db.learned[npcID] = nil
-		Rebuild()
+		RebuildOne(npcID)
 	end
 end
 
@@ -605,8 +652,17 @@ end
 
 ns.Listen("READY", function()
 	Rebuild()
-	-- Give the other addon a moment to finish its own startup.
-	C_Timer.After(3, function()
-		Rares.ImportQuestie(false)
-	end)
+	-- Give the other addon a moment to finish its own startup, and look again
+	-- a few times in case its tables are not there yet.
+	local waits = { 3, 10, 30 }
+	local function Try(attempt)
+		C_Timer.After(waits[attempt], function()
+			if Rares.QuestieAvailable() then
+				Rares.ImportQuestie(false)
+			elseif waits[attempt + 1] then
+				Try(attempt + 1)
+			end
+		end)
+	end
+	Try(1)
 end)

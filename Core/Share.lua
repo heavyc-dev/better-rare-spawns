@@ -193,7 +193,10 @@ function handlers.S(from, npcID, mapID, x, y, shard, rank, name)
 			return
 		end
 		taught[from] = (taught[from] or 0) + 1
-		Rares.Learn(npcID, { name = name, rank = rank, map = mapID, x = x, y = y, remote = true })
+		-- Somebody else's word only: kept as unconfirmed (and not passed on)
+		-- until a creature here shows its own classification, which either
+		-- confirms it or makes Detect forget it.
+		Rares.Learn(npcID, { name = name, rank = rank, map = mapID, x = x, y = y, remote = true, unconfirmed = true })
 	end
 	if Rares.IsIgnored(npcID) then
 		return
@@ -252,6 +255,16 @@ end
 local pendingAnswer = {} -- [requester] = timer
 local lastAnswer
 
+--- A sender as every client names them: "Name-Realm". Locally a player of
+-- this realm is plain "Name", which would mean someone else elsewhere.
+local function FullName(name)
+	if strfind(name, "-", 1, true) then
+		return name
+	end
+	local realm = GetNormalizedRealmName and GetNormalizedRealmName()
+	return (realm and realm ~= "") and (name .. "-" .. realm) or name
+end
+
 local function Answer(requester)
 	pendingAnswer[requester] = nil
 	local now = GetTime()
@@ -259,7 +272,7 @@ local function Answer(requester)
 		return
 	end
 	lastAnswer = now
-	SendGuild("Z:1:" .. requester)
+	SendGuild("Z:1:" .. FullName(requester))
 
 	-- The most recent deaths, newest first, each with what we learned about
 	-- that rare's respawn.
@@ -305,6 +318,10 @@ function handlers.Q(from)
 end
 
 function handlers.Z(_, _, requester)
+	-- Back to the local form, the one the request was filed under.
+	if requester and Ambiguate then
+		requester = Ambiguate(requester, "none")
+	end
 	local timer = requester and pendingAnswer[requester]
 	if timer then
 		timer:Cancel()
@@ -313,10 +330,14 @@ function handlers.Z(_, _, requester)
 end
 
 --- Asks the guild for its timers (once per login, also on /brs sync).
--- Returns true when sent, or false plus why not ("receive" or "guild").
+-- Returns true when sent, or false plus why not ("receive", "off" or "guild").
 function Share.RequestSync()
 	if not Settings().receive then
 		return false, "receive"
+	end
+	-- With guild sharing off the answers would be thrown away on arrival.
+	if not Settings().guild then
+		return false, "off"
 	end
 	if not (IsInGuild and IsInGuild()) then
 		return false, "guild"
@@ -339,7 +360,9 @@ function Share.OnMessage(prefix, message, channel, from)
 	if not setting or not Settings()[setting] then
 		return
 	end
-	from = Ambiguate and Ambiguate(from, "short") or from
+	-- "none" drops the realm only for players of this realm, so a player of
+	-- the same name on another realm stays somebody else.
+	from = Ambiguate and Ambiguate(from, "none") or from
 	if from == UnitName("player") then
 		return
 	end

@@ -116,6 +116,43 @@ end
 -- Waypoints
 -------------------------------------------------------------------------------
 
+-- The waypoint this addon placed, so it can be taken away again without
+-- touching one the player set by hand:
+--   { tomtom = uid }  or  { map = mapID, x = 0-1, y = 0-1 } for the map pin
+local placed
+
+--- True when the built-in map pin is still the one placed here.
+local function PinIsOurs(pin)
+	if not C_Map.GetUserWaypoint then
+		return true -- cannot tell: assume nobody moved it
+	end
+	local ok, point = pcall(C_Map.GetUserWaypoint)
+	if not ok then
+		return true
+	end
+	if type(point) ~= "table" or point.uiMapID ~= pin.map or not point.position then
+		return false
+	end
+	local px, py = point.position:GetXY()
+	return math.abs(px - pin.x) < 0.001 and math.abs(py - pin.y) < 0.001
+end
+
+local function RemovePlaced()
+	local old = placed
+	placed = nil
+	if not old then
+		return
+	end
+	if old.tomtom then
+		local tomtom = _G.TomTom
+		if tomtom and tomtom.RemoveWaypoint then
+			pcall(tomtom.RemoveWaypoint, tomtom, old.tomtom)
+		end
+	elseif C_Map.ClearUserWaypoint and PinIsOurs(old) then
+		pcall(C_Map.ClearUserWaypoint)
+	end
+end
+
 --- Points the player at a position. Uses TomTom when installed, else the
 -- built-in map pin. Also marks the rare as tracked for the minimap.
 function Status.SetWaypoint(npcID, mapID, x, y)
@@ -128,21 +165,29 @@ function Status.SetWaypoint(npcID, mapID, x, y)
 	end
 
 	local name = Rares.Name(npcID)
-	local done = false
+
+	-- One waypoint at a time: the previous one goes before the new one comes.
+	RemovePlaced()
 
 	local tomtom = _G.TomTom
 	if tomtom and tomtom.AddWaypoint then
-		done = pcall(tomtom.AddWaypoint, tomtom, mapID, x / 100, y / 100, { title = name, from = "BetterRareSpawns" })
+		local ok, uid = pcall(tomtom.AddWaypoint, tomtom, mapID, x / 100, y / 100, { title = name, from = "BetterRareSpawns" })
+		if ok and uid then
+			placed = { tomtom = uid }
+		end
 	end
 
-	if not done and C_Map.SetUserWaypoint and UiMapPoint then
-		done = pcall(function()
+	if not placed and C_Map.SetUserWaypoint and UiMapPoint then
+		local ok = pcall(function()
 			C_Map.ClearUserWaypoint()
 			C_Map.SetUserWaypoint(UiMapPoint.CreateFromCoordinates(mapID, x / 100, y / 100))
 			if C_SuperTrack and C_SuperTrack.SetSuperTrackedUserWaypoint then
 				C_SuperTrack.SetSuperTrackedUserWaypoint(true)
 			end
 		end)
+		if ok then
+			placed = { map = mapID, x = x / 100, y = y / 100 }
+		end
 	end
 
 	ns.tracked = { id = npcID, map = mapID, x = x, y = y }
@@ -151,15 +196,44 @@ function Status.SetWaypoint(npcID, mapID, x, y)
 	return true
 end
 
+--- Stops tracking and removes the waypoint placed for it. Returns true when
+-- something was being tracked.
 function Status.ClearWaypoint()
-	if ns.tracked then
-		ns.tracked = nil
-		if C_Map.ClearUserWaypoint then
-			pcall(C_Map.ClearUserWaypoint)
-		end
-		ns.Fire("TRACK_CHANGED")
+	if not ns.tracked then
+		return false
 	end
+	ns.tracked = nil
+	RemovePlaced()
+	ns.Fire("TRACK_CHANGED")
+	return true
 end
+
+--- A click on something that sets a waypoint: the same thing again stops
+-- tracking. `anyPoint` treats every position of the tracked rare as "the
+-- same thing" (list rows, whose position follows the player).
+function Status.ToggleWaypoint(npcID, mapID, x, y, anyPoint)
+	local tracked = ns.tracked
+	if tracked and tracked.id == npcID
+		and (anyPoint or not mapID or (tracked.map == mapID and tracked.x == x and tracked.y == y)) then
+		Status.ClearWaypoint()
+		ns.Print("Stopped tracking " .. Rares.Name(npcID) .. ".")
+		return false
+	end
+	return Status.SetWaypoint(npcID, mapID, x, y)
+end
+
+-- The tracked rare died on this layer: there is nothing left to walk to.
+ns.Listen("RARE_DIED", function(npcID, shard)
+	local tracked = ns.tracked
+	if not tracked or tracked.id ~= npcID then
+		return
+	end
+	if shard and shard ~= "?" and ns.currentShard and shard ~= ns.currentShard then
+		return
+	end
+	Status.ClearWaypoint()
+	ns.Print(Rares.Name(npcID) .. " died - stopped tracking.")
+end)
 
 -------------------------------------------------------------------------------
 -- Chat

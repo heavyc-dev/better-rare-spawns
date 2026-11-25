@@ -87,7 +87,9 @@ function DB.Load()
 		_G.BetterRareSpawnsDB = db
 	end
 
-	local from = db.schema or DB.SCHEMA
+	-- Saved variables without a schema number are older than every migration
+	-- (on a fresh install there is nothing saved for them to change).
+	local from = db.schema or 1
 	db.schema = DB.SCHEMA
 	db.settings = type(db.settings) == "table" and db.settings or {}
 	if from < 2 and type(db.settings.alerts) == "table" then

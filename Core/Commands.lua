@@ -9,6 +9,7 @@ local HELP = {
 	"/brs config - options",
 	"/brs test - fire a test alert",
 	"/brs find <name> - waypoint to a rare by name",
+	"/brs untrack - stop tracking and remove the waypoint",
 	"/brs camp - camp bar for the nearest spawn point (again to close)",
 	"/brs want <name> - add or remove a rare from the wanted list",
 	"/brs sync - ask the guild for its timers now",
@@ -107,6 +108,15 @@ function commands.find(rest)
 	end
 end
 
+function commands.untrack()
+	local tracked = ns.tracked
+	if tracked and Status.ClearWaypoint() then
+		ns.Print("Stopped tracking " .. Rares.Name(tracked.id) .. ".")
+	else
+		ns.Print("Nothing is being tracked.")
+	end
+end
+
 local function FindByName(rest)
 	local query = strlower(strtrim(rest or ""))
 	if query == "" then
@@ -145,6 +155,8 @@ function commands.sync()
 		ns.Print("Asked the guild for its timers.")
 	elseif why == "receive" then
 		ns.Print("Receiving shared data is turned off, so a sync would bring nothing in.")
+	elseif why == "off" then
+		ns.Print("Guild sharing is turned off, so a sync would bring nothing in.")
 	else
 		ns.Print("You are not in a guild.")
 	end
