@@ -47,7 +47,7 @@ No libraries, no bundled art, about 200 KB.
 
 | Where | Action | Result |
 | --- | --- | --- |
-| Map pin, list row | Click | Waypoint and track |
+| Map pin, list row | Click | Waypoint and track; click again (or `/brs untrack`) to stop |
 | | Shift-click | Put name, coordinates and status in the chat box |
 | | Ctrl-click | Open that rare's journal page |
 | | Alt-click | Hide that rare (`/brs unhide` to undo) |

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+Waypoints
+- Tracking can be stopped: click the tracked map pin or list row again, or type `/brs untrack`. It also stops
+  by itself when the tracked rare dies.
+- With TomTom, a new waypoint replaces the previous one instead of adding another arrow, and stopping removes
+  it. A map pin you placed yourself is no longer cleared.
+
+Sharing
+- A rare you only know from another player's report is treated as a guess until you see it yourself. If the
+  creature turns out not to be a rare it is forgotten instead of alerting.
+- Players with the same name on different realms are no longer mixed up (one of them could be taken for you).
+- `/brs sync` and the login sync no longer ask the guild when guild sharing is turned off.
+
+QuestieDB
+- An import that fails no longer blocks `/brs import` until a reload.
+- The import at login looks for QuestieDB a few more times when it is not ready yet.
+
+Other
+- Learning a rare or a spawn point updates that one rare instead of rebuilding the whole list.
+- Settings saved by the very first versions are migrated like any other.
+
 ## 1.1.1
 
 - The camp bar no longer pops up by itself at spawn points. Turn it back on in the options, or open it any time
