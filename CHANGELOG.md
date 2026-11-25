@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
 
 Waypoints
 - Tracking can be stopped: click the tracked map pin or list row again, or type `/brs untrack`. It also stops
@@ -17,6 +17,12 @@ Sharing
 QuestieDB
 - An import that fails no longer blocks `/brs import` until a reload.
 - The import at login looks for QuestieDB a few more times when it is not ready yet.
+
+Zone list and camp bar
+- A rare reported from the next zone no longer shows that zone's coordinates as if they were in yours: its list
+  row, hover card and waypoint now point at the right map.
+- No more "spawns near here" notices while on a flight path.
+- The camp bar closes when the rare it was waiting for turns out not to be one.
 
 Other
 - Learning a rare or a spawn point updates that one rare instead of rebuilding the whole list.
