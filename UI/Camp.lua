@@ -267,6 +267,11 @@ local function Notice(now)
 	if not alerts.enabled or not alerts.nearby then
 		return
 	end
+	-- A flight path crosses one spawn area after another without the player
+	-- being able to stop at any of them.
+	if UnitOnTaxi and ns.Clean(UnitOnTaxi("player")) then
+		return
+	end
 	local npcID = Nearest(NOTICE_RANGE)
 	if not npcID or (noticed[npcID] and now - noticed[npcID] < NOTICE_GAP) then
 		return
@@ -294,6 +299,10 @@ function Camp.Tick()
 	local now = GetTime()
 	Notice(now)
 
+	if campID and not Rares.Get(campID) then
+		-- The rare was forgotten (a guess that turned out wrong): nothing to wait for.
+		Camp.Stop(false)
+	end
 	if campID then
 		local distance, located = DistanceTo(campID)
 		if located and (not distance or distance > leaveDistance) then

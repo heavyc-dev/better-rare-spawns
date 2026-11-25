@@ -881,6 +881,35 @@ local sent, why = ns.Share.RequestSync()
 check("no sync request with guild sharing off", sent == false and why == "off")
 ns.db.settings.share.guild = true
 
+-- A sighting reported from the next zone keeps its own map in the zone list.
+ns.Share.OnMessage("BRS1", "S:100:1433:300:300:?:rare:Old Rare", "GUILD", "Friend-Realm")
+ns.Tracker.Toggle(true)
+local listed
+for _, frame in ipairs(T.frames) do
+	if frame.__parent == BetterRareSpawnsTracker and frame.item and frame.item.id == 100 then listed = frame.item end
+end
+check("a list row keeps the map its coordinates belong to", listed and listed.map == 1433 and listed.x == 30, listed and listed.map)
+check("and measures the distance across the zone border", listed and listed.distance > 1500 and listed.distance < 99999, listed and listed.distance)
+ns.Tracker.Toggle(false)
+
+-- Flying over a spawn area on a flight path is not walking into it.
+local spot = { T.player.x, T.player.y }
+T.player.x, T.player.y = 0.60, 0.60
+function UnitOnTaxi() return true end
+local chatBefore = #T.chat
+ns.Camp.Tick()
+check("no spawn area notice on a flight path", Said("Honest Rare|r spawns near here", chatBefore) == 0)
+function UnitOnTaxi() return false end
+ns.Camp.Tick()
+check("the notice comes on foot", Said("Honest Rare|r spawns near here", chatBefore) == 1)
+
+ns.Rares.Learn(792, { name = "Wrong Guess", rank = "rare", map = 1429, x = 60, y = 60 })
+ns.Camp.Start(792, true)
+ns.Rares.Forget(792)
+ns.Camp.Tick()
+check("the camp bar closes when its rare is forgotten", ns.Camp.Current() == nil)
+T.player.x, T.player.y = spot[1], spot[2]
+
 do -- saved variables from before the schema number
 	local current = BetterRareSpawnsDB
 	BetterRareSpawnsDB = { settings = { camp = { enabled = true }, alerts = { instances = false } } }

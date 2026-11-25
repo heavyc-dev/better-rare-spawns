@@ -88,15 +88,23 @@ local function Collect()
 		if not Rares.IsIgnored(entry.id) then
 			local info = Respawn.GetState(entry.id, nil, state)
 			if not activeOnly or ACTIVE[info.state] then
-				local _, x, y = Status.BestPoint(entry.id, mapID)
+				-- A fresh sighting comes back on its own map, which need not be
+				-- this one (a report from the next zone): the coordinates only
+				-- mean something together with that map.
+				local pointMap, x, y = Status.BestPoint(entry.id, mapID)
+				local distance
+				if px and x then
+					local hereX, hereY = Util.ToMap(pointMap, x, y, mapID)
+					distance = hereX and Util.Distance(mapID, px, py, mapID, hereX, hereY)
+				end
 				items[#items + 1] = {
 					id = entry.id,
-					map = mapID,
+					map = pointMap or mapID,
 					x = x,
 					y = y,
 					state = info.state,
 					rank = entry.rank,
-					distance = (px and x) and Util.Distance(mapID, px, py, mapID, x, y) or 99999,
+					distance = distance or 99999,
 				}
 			end
 		end
