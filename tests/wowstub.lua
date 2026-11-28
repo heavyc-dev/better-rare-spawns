@@ -56,6 +56,8 @@ function methods:GetStringHeight() return 12 end
 function methods:GetScale() return self.__scale or 1 end
 function methods:SetScale(scale) self.__scale = scale end
 function methods:GetEffectiveScale() return 1 end
+function methods:GetAlpha() return self.__alpha or 1 end
+function methods:SetAlpha(alpha) self.__alpha = alpha end
 function methods:GetCenter() return 400, 300 end
 function methods:GetFrameLevel() return 1 end
 function methods:IsMouseOver() return false end

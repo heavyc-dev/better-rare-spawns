@@ -64,9 +64,21 @@ local function CreateCard()
 	card.hint:SetPoint("BOTTOMLEFT", card.model, "BOTTOMRIGHT", 8, 2)
 	card.hint:SetText("Click to target")
 
-	local close = Style.Close(card, function()
-		Alerts.Dismiss()
-	end, 24)
+	-- The card is protected, so plain code cannot hide it in combat. A secure
+	-- handler can: the X then works at any time.
+	local close, secure = Style.Template("Button", nil, card, "UIPanelCloseButton,SecureHandlerClickTemplate")
+	if secure then
+		close:SetSize(24, 24)
+		close:RegisterForClicks("AnyUp")
+		close:SetAttribute("_onclick", "self:GetParent():Hide()")
+		close:HookScript("OnClick", function()
+			Alerts.Dismiss()
+		end)
+	else
+		close = Style.Close(card, function()
+			Alerts.Dismiss()
+		end, 24)
+	end
 	close:SetPoint("TOPRIGHT", 0, 0)
 
 	local way = Style.Button(card, "Waypoint", 74, 18, function()
@@ -115,9 +127,15 @@ function Alerts.Dismiss()
 		hideTimer:Cancel()
 		hideTimer = nil
 	end
+	-- Hiding has to wait for combat to end; until then the card is at least
+	-- out of sight (right-click and the timer have no secure way to hide it).
+	if card and InCombatLockdown() then
+		card:SetAlpha(0)
+	end
 	ns.OutOfCombat("alert", function()
 		if card then
 			card:Hide()
+			card:SetAlpha(1)
 		end
 	end)
 end
@@ -168,6 +186,7 @@ local function ShowCard(npcID, info)
 			pcall(card.model.SetCreature, card.model, npcID)
 		end
 
+		card:SetAlpha(1)
 		card:Show()
 
 		if hideTimer then

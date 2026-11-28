@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- The X on the alert card now closes it in combat too. Before, the card stayed until the fight was over.
+  Right-clicking it in combat, or its timer running out, takes it out of sight at once.
+
 ## 1.2.0
 
 Waypoints

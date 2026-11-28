@@ -735,6 +735,23 @@ T.Fire("PLAYER_REGEN_ENABLED")
 check("card appears after combat", BetterRareSpawnsAlert:IsShown()
 	and BetterRareSpawnsAlert:GetAttribute("macrotext") == "/cleartarget\n/targetexact Old Rare")
 
+-- The card is protected: in combat only a secure handler can hide it.
+local alertClose
+for _, made in ipairs(T.frames) do
+	if made.__parent == BetterRareSpawnsAlert and tostring(made.__template):find("SecureHandlerClickTemplate", 1, true) then
+		alertClose = made
+	end
+end
+check("the card's X hides it through a secure handler",
+	alertClose ~= nil and alertClose:GetAttribute("_onclick") == "self:GetParent():Hide()")
+T.combat = true
+alertClose:GetScript("OnClick")(alertClose)
+check("a card dismissed in combat is out of sight at once", BetterRareSpawnsAlert:GetAlpha() == 0)
+T.combat = false
+T.Fire("PLAYER_REGEN_ENABLED")
+check("and is hidden for good after combat",
+	not BetterRareSpawnsAlert:IsShown() and BetterRareSpawnsAlert:GetAlpha() == 1)
+
 check("dungeon and raid alerts are on by default", ns.DB.defaults.alerts.instances == true)
 T.instance = true
 T.units.nameplate4 = { guid = Guid(101, "INST000001"), name = "Elite Rare", level = 25, class = "rareelite" }
